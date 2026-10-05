@@ -279,6 +279,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
   gap: 8px; padding: 24px; background: var(--bg); text-align: center;
 }
 .timer.rest { background: var(--accent-soft); }
+.timer.ready { background: var(--surface-2); }
+.timer.ready .timer-clock { color: var(--accent); }
+.timer-mode { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+.tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--text-2); vertical-align: 1px; }
+[hidden] { display: none !important; }
 .timer-title { font-size: 22px; font-weight: 700; }
 .timer-sub { color: var(--text-2); min-height: 1.4em; }
 .timer-clock { font-size: 96px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; margin: 16px 0; }

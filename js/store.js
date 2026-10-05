@@ -14,7 +14,7 @@ const listeners = new Set();
 function emptyState() {
   return {
     version: 1,
-    settings: { name: '', unit: 'lb', updatedAt: now() },
+    settings: { name: '', unit: 'lb', autoStart: true, grace: 2, updatedAt: now() },
     exercises: {},
     plans: {},
     sessions: {},
@@ -145,6 +145,9 @@ export function targetFor(item, plan, key = dateKey()) {
   };
 }
 
+// Timer is on unless explicitly turned off (older data has no flag).
+export const timerOn = (item) => item.timer !== false;
+
 // ---- sessions -----------------------------------------------------------------
 
 export function sessionFor(planId, key = dateKey()) {
@@ -158,13 +161,19 @@ const setCount = (s) => s.items.reduce((n, it) => n + it.sets.length, 0);
 // Build item list from the plan, keeping any sets already logged.
 function buildItems(plan, key, existing = []) {
   const byId = new Map(existing.map((it) => [it.itemId, it]));
-  const items = plan.items.map((pi) => ({
-    itemId: pi.id,
-    exerciseId: pi.exerciseId,
-    name: get('exercises', pi.exerciseId)?.name, // kept in case the exercise is deleted later
-    target: targetFor(pi, plan, key),
-    sets: byId.get(pi.id)?.sets || [],
-  }));
+  const items = plan.items.map((pi) => {
+    const prev = byId.get(pi.id);
+    return {
+      itemId: pi.id,
+      exerciseId: pi.exerciseId,
+      name: get('exercises', pi.exerciseId)?.name, // kept in case the exercise is deleted later
+      // "Custom…" changes apply to this workout only, so keep them over the plan's values.
+      target: prev?.custom ? prev.target : targetFor(pi, plan, key),
+      timer: prev?.custom ? prev.timer : timerOn(pi),
+      custom: !!prev?.custom,
+      sets: prev?.sets || [],
+    };
+  });
   // Keep removed-from-plan items only if they already have logged work.
   for (const it of existing) {
     if (!plan.items.some((pi) => pi.id === it.itemId) && it.sets.length) items.push(it);

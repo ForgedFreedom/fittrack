@@ -1,4 +1,4 @@
-import { list, get, upsert, remove } from '../store.js';
+import { list, get, upsert, remove, timerOn } from '../store.js';
 import { esc, uid, dateKey, DAY_NAMES, num } from '../util.js';
 import { icons, sheet, toast, confirmSheet } from '../ui.js';
 import { scheduleText, backLink, exerciseOf, targetText, emptyState } from './common.js';
@@ -24,6 +24,7 @@ export function newItem(exerciseId) {
     sets: 3,
     reps: ex.track.reps ? 10 : 0,
     duration: ex.track.duration ? 30 : 0,
+    timer: true, // on by default; 0 seconds = stopwatch
     weight: 0,
     rest: 45,
   };
@@ -141,7 +142,7 @@ export const editView = {
   onInput(el, type) {
     const v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? num(el.value) : el.value;
     setPath(draft, el.dataset.bind, v);
-    return type === 'change' && el.tagName === 'SELECT';
+    return type === 'change' && (el.tagName === 'SELECT' || el.type === 'checkbox');
   },
 
   actions: {
@@ -228,11 +229,13 @@ function itemEditor(it, i, count) {
       <div class="field-grid">
         ${n('sets', 'Sets', it.sets, 'min="1"')}
         ${ex.track.reps ? n('reps', ex.perSide ? 'Reps / side' : 'Reps', it.reps) : ''}
-        ${ex.track.duration ? n('duration', 'Seconds', it.duration) : ''}
+        ${timerOn(it) || ex.track.duration ? n('duration', 'Seconds', it.duration) : ''}
         ${ex.track.weight ? n('weight', 'Weight', it.weight, 'inputmode="decimal" step="any"') : ''}
         ${n('rest', 'Rest (s)', it.rest)}
       </div>
-      <p class="muted small">${esc(targetText(it, ex))}</p>
+      <label class="field inline"><span>Timer${timerOn(it) && !it.duration ? ' <span class="muted">(0 seconds = stopwatch)</span>' : ''}</span>
+        <span class="switch"><input type="checkbox" data-bind="items.${i}.timer" ${timerOn(it) ? 'checked' : ''} aria-label="Timer"><span></span></span></label>
+      <p class="muted small">${esc(targetText(it, ex, timerOn(it)))}</p>
     </section>`;
 }
 

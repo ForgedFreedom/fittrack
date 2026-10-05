@@ -1,5 +1,5 @@
 import { getState, updateSettings, mergeStates, replaceState, load } from '../store.js';
-import { esc, dateKey } from '../util.js';
+import { esc, dateKey, num } from '../util.js';
 import { icons, toast, confirmSheet } from '../ui.js';
 import * as sync from '../sync.js';
 
@@ -42,6 +42,15 @@ export function render() {
         </select></label>
     </section>
 
+    <h2 class="section-title">Workout timers</h2>
+    <section class="card form">
+      <label class="field inline"><span>Auto-start next timer after rest</span>
+        <span class="switch"><input type="checkbox" data-setting="autoStart" ${st.autoStart !== false ? "checked" : ""}><span></span></span></label>
+      <label class="field"><span>Get-ready seconds before an auto-start</span>
+        <input type="number" inputmode="numeric" min="0" max="30" step="1" data-setting="grace" value="${st.grace ?? 2}"></label>
+      <p class="small muted">When on, the next timed set starts by itself after the rest countdown, with a short "Get ready" countdown first. When off, you tap Start for each set. You can stop the auto-start on the rest screen anytime.</p>
+    </section>
+
     <h2 class="section-title">Google Drive sync</h2>
     ${syncCard()}
 
@@ -72,7 +81,10 @@ export function onSetting(el) {
     sync.preload().catch(() => {});
     return true;
   }
-  updateSettings({ [key]: el.value.trim?.() ?? el.value });
+  const value = el.type === "checkbox" ? el.checked
+    : el.type === "number" ? Math.max(0, Math.round(num(el.value)))
+    : el.value.trim();
+  updateSettings({ [key]: value });
   return false;
 }
 

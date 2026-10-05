@@ -1,6 +1,6 @@
 // Shared UI pieces: toast, bottom sheet, timers, sound, icons.
 
-import { esc, fmtDuration } from './util.js';
+import { esc } from './util.js';
 
 // ---- toast -------------------------------------------------------------------
 
@@ -17,7 +17,8 @@ export function toast(msg, ms = 2500) {
 // sheet({title, body, buttons:[{label, value, cls}]}) -> Promise<{value, form}>
 // `form` is a plain object of the sheet's named inputs.
 
-export function sheet({ title, body = '', buttons = [] }) {
+// `onOpen(form)` runs once the sheet is in the page, for live tweaks to its fields.
+export function sheet({ title, body = '', buttons = [], onOpen }) {
   return new Promise((resolve) => {
     const root = document.getElementById('overlay');
     root.innerHTML = `
@@ -34,6 +35,7 @@ export function sheet({ title, body = '', buttons = [] }) {
     const first = form.querySelector('input:not([type=hidden]), select, textarea');
     // Don't auto-focus on touch devices; it pops the keyboard over the sheet.
     if (first && !matchMedia('(pointer: coarse)').matches) first.focus();
+    onOpen?.(form);
 
     const done = (value) => {
       const data = Object.fromEntries(new FormData(form).entries());
@@ -91,64 +93,74 @@ export function beep(times = 1) {
 
 // ---- wake lock: keep the screen on during timers -----------------------------------
 
-let wakeLock;
+let wakeLock, timerOpen = false;
 async function keepAwake(on) {
   try {
     if (on && !wakeLock && navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen');
-    if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+    if (!on && wakeLock) { const w = wakeLock; wakeLock = null; await w.release(); }
   } catch { /* not supported */ }
 }
 
 // ---- full-screen timer -------------------------------------------------------------
-// mode 'down': counts down from `seconds`, calls onDone(elapsed) at zero.
-// mode 'rest': same, with a +15s button and "Skip".
-// Returns nothing; resolves through callbacks.
+// Modes:
+//   'down'  : work countdown from `seconds` (Pause / Done / Cancel)
+//   'up'    : stopwatch counting up, ends when the user taps Done
+//   'rest'  : rest countdown (+15s / Skip). `stopLabel` adds a button that calls onCancel.
+//   'ready' : short "get ready" countdown before an auto-started set (Start now / Cancel)
+// onDone(elapsedSeconds) when finished (or skipped); onCancel() when cancelled.
 
-export function timer({ title, subtitle = '', seconds, mode = 'down', onDone, onCancel }) {
+const BEEPS = { down: 3, rest: 2, ready: 1 };
+
+export function timer({ title, subtitle = '', seconds = 0, mode = 'down', stopLabel, onDone, onCancel }) {
   unlockAudio();
   keepAwake(true);
+  timerOpen = true;
   const root = document.getElementById('overlay');
-  let end = Date.now() + seconds * 1000;
-  const start = Date.now();
-  let paused = false, pausedLeft = 0, raf, finished = false;
+  let total = seconds;
+  let accumulated = 0, runningSince = Date.now(), paused = false, raf, finished = false;
+  const elapsed = () => (accumulated + (paused ? 0 : Date.now() - runningSince)) / 1000;
+
+  const buttons = {
+    down: `<button class="btn" data-t="pause">Pause</button><button class="btn primary" data-t="done">Done</button>`,
+    up: `<button class="btn" data-t="pause">Pause</button><button class="btn primary" data-t="done">Done</button>`,
+    rest: `<button class="btn" data-t="add">+15s</button><button class="btn primary" data-t="done">Skip rest</button>`,
+    ready: `<button class="btn primary" data-t="done">Start now</button>`,
+  }[mode];
+  const cancelLabel = mode === 'rest' ? stopLabel : 'Cancel';
 
   root.innerHTML = `
-    <div class="timer ${mode === 'rest' ? 'rest' : ''}">
+    <div class="timer ${mode}">
       <div class="timer-title">${esc(title)}</div>
       <div class="timer-sub">${esc(subtitle)}</div>
+      ${mode === 'up' ? '<div class="timer-mode">Stopwatch</div>' : ''}
       <div class="timer-clock" aria-live="off"></div>
-      <div class="timer-buttons">
-        ${mode === 'rest'
-          ? `<button class="btn" data-t="add">+15s</button><button class="btn primary" data-t="skip">Skip rest</button>`
-          : `<button class="btn" data-t="pause">Pause</button><button class="btn primary" data-t="done">Done</button>`}
-      </div>
-      <button class="btn ghost" data-t="cancel">${mode === 'rest' ? '' : 'Cancel'}</button>
+      <div class="timer-buttons">${buttons}</div>
+      ${cancelLabel ? `<button class="btn ghost" data-t="cancel">${esc(cancelLabel)}</button>` : ''}
     </div>`;
   root.classList.add('open');
   const clock = root.querySelector('.timer-clock');
-  const left = () => (paused ? pausedLeft : Math.max(0, (end - Date.now()) / 1000));
 
-  const close = () => {
-    cancelAnimationFrame(raf);
-    root.classList.remove('open');
-    root.innerHTML = '';
-    keepAwake(false);
-  };
   const finish = (cancelled) => {
     if (finished) return;
     finished = true;
-    const elapsed = Math.round((Date.now() - start) / 1000);
-    close();
+    const secs = Math.max(1, Math.round(elapsed()));
+    cancelAnimationFrame(raf);
+    root.classList.remove('open');
+    root.innerHTML = '';
+    timerOpen = false;
+    // Release the wake lock only if no other timer follows straight after.
+    setTimeout(() => { if (!timerOpen) keepAwake(false); }, 1500);
     if (cancelled) onCancel?.();
-    else onDone?.(Math.min(elapsed, seconds) || seconds);
+    else onDone?.(mode === 'down' ? Math.min(secs, total) : secs);
   };
 
   const tick = () => {
-    const l = left();
-    clock.textContent = fmtDuration(Math.ceil(l));
-    if (l <= 0 && !paused) {
-      beep(mode === 'rest' ? 2 : 3);
-      return finish(false);
+    if (mode === 'up') {
+      clock.textContent = fmtClock(Math.floor(elapsed()));
+    } else {
+      const left = Math.max(0, total - elapsed());
+      clock.textContent = fmtClock(Math.ceil(left));
+      if (left <= 0) { beep(BEEPS[mode]); return finish(false); }
     }
     raf = requestAnimationFrame(tick);
   };
@@ -157,16 +169,18 @@ export function timer({ title, subtitle = '', seconds, mode = 'down', onDone, on
   root.querySelectorAll('[data-t]').forEach((b) => b.addEventListener('click', () => {
     unlockAudio();
     const t = b.dataset.t;
-    if (t === 'add') end += 15000;
-    if (t === 'skip' || t === 'done') finish(false);
+    if (t === 'add') total += 15;
+    if (t === 'done') finish(false);
     if (t === 'cancel') finish(true);
     if (t === 'pause') {
-      if (paused) { end = Date.now() + pausedLeft * 1000; paused = false; b.textContent = 'Pause'; }
-      else { pausedLeft = left(); paused = true; b.textContent = 'Resume'; }
+      if (paused) { runningSince = Date.now(); paused = false; b.textContent = 'Pause'; }
+      else { accumulated += Date.now() - runningSince; paused = true; b.textContent = 'Resume'; }
     }
   }));
-  if (mode === 'rest') root.querySelector('[data-t=cancel]').remove();
 }
+
+// Always m:ss on the big clock so the digits don't jump around.
+const fmtClock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
 // ---- icons (inline SVG, inherit currentColor) ---------------------------------------
 

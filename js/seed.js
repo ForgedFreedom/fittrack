@@ -44,7 +44,7 @@ const EXERCISES = [
 ];
 
 const item = (id, exerciseId, sets, reps, extra = {}) => ({
-  id, exerciseId, sets, reps, duration: 0, weight: 0, rest: 45, ...extra,
+  id, exerciseId, sets, reps, duration: 0, weight: 0, rest: 45, timer: true, ...extra,
 });
 
 export function seedData(state) {
