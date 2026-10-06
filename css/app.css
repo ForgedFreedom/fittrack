@@ -302,3 +302,52 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---- profiles, quick add, household ---------------------------------------------------- */
+body.no-tabs .tabbar { display: none; }
+.tiny { font-size: 12px; margin: 2px 0 0; }
+.profile-link { padding: 12px 14px; border-top: 1px solid var(--border); }
+
+.quick-add { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.quick-add .btn { flex-direction: column; gap: 2px; padding: 10px 6px; font-size: 14px; }
+.quick-add .btn svg { width: 22px; height: 22px; color: var(--accent); }
+
+.section-title-row { margin: 24px 4px 8px; }
+.section-title-row .section-title { margin: 0; }
+.section-title-row .btn { min-height: 32px; padding: 4px 8px; }
+.household { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.member { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; box-shadow: var(--shadow); }
+.member p { margin: 4px 0; }
+.streak { display: inline-flex; align-items: center; gap: 2px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.streak svg { width: 18px; height: 18px; color: var(--accent); }
+.mini-plans { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.mini { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); }
+.mini.done { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); font-weight: 600; }
+
+.list-row.as-button {
+  width: 100%; background: transparent; border: 0; border-top: 1px solid var(--border);
+  font: inherit; color: var(--text); text-align: left; cursor: pointer;
+}
+.list-row.as-button:first-child { border-top: 0; }
+.list-row.as-button svg { width: 18px; height: 18px; vertical-align: -3px; color: var(--accent); }
+
+/* full-width segmented control (tabs, radio choices) */
+.seg.wide { display: flex; width: 100%; }
+.seg.wide > * { flex: 1; text-align: center; }
+.seg.tabs { margin-bottom: 14px; }
+.seg label { position: relative; }
+.seg label input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; min-height: 0; }
+.seg label span { display: block; padding: 8px 4px; border-radius: 8px; font-size: 15px; color: var(--text-2); }
+.seg label input:checked + span { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: var(--shadow); }
+.seg label input:focus-visible + span { outline: 2px solid var(--accent); }
+
+/* weight chart */
+.chart .dot { fill: var(--muted); }
+.chart .avg-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .goal-line { stroke: var(--text-2); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.chart .goal-label { fill: var(--text-2); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--text-2); margin-bottom: 2px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.lg-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.lg-line { width: 16px; height: 2px; background: var(--accent); display: inline-block; }
+.lg-dash { width: 16px; height: 0; border-top: 2px dashed var(--text-2); display: inline-block; }

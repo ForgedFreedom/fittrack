@@ -1,11 +1,13 @@
-// Google Drive sync. Data is stored as one JSON file in the user's hidden
-// "appDataFolder": private to this app and not visible in their Drive file list.
-// Each person signs in with their own Google account, so data stays separate.
+// Google Drive sync. Data is stored as JSON files in the signed-in account's hidden
+// "appDataFolder": private to this app and not visible in the Drive file list.
+// Several profiles (people) can share one Google account; each has its own file,
+// plus a small summary file the others read for the household view.
 
 import { GOOGLE_CLIENT_ID } from './config.js';
 import { getState, replaceState, mergeStates } from './store.js';
+import { current as currentProfile } from './profiles.js';
+import { summary } from './stats.js';
 
-const FILE_NAME = 'fittrack-data.json';
 const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 const API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
@@ -16,6 +18,7 @@ const LS = {
   token: 'fittrack:gtoken',
   lastSync: 'fittrack:lastsync',
   dirty: 'fittrack:dirty',
+  household: 'fittrack:household',
 };
 
 let tokenClient = null;
@@ -106,14 +109,21 @@ async function api(token, url, opts = {}) {
   return res;
 }
 
-async function findFile(token) {
-  const q = encodeURIComponent(`name='${FILE_NAME}'`);
-  const res = await api(token, `${API}/files?spaces=appDataFolder&q=${q}&fields=files(id,modifiedTime)`);
-  const { files } = await res.json();
-  return files?.[0] || null;
+// Drive files, all in the hidden app folder of the signed-in Google account:
+//   fittrack-p-<profileId>.json  full data for one profile
+//   fittrack-s-<profileId>.json  small shareable summary (streaks, this week, today's plans)
+const dataName = (id) => `fittrack-p-${id}.json`;
+const summaryName = (id) => `fittrack-s-${id}.json`;
+
+async function listFiles(token) {
+  const q = encodeURIComponent("name contains 'fittrack-'");
+  const res = await api(token, `${API}/files?spaces=appDataFolder&q=${q}&fields=files(id,name,modifiedTime)&pageSize=100`);
+  return (await res.json()).files || [];
 }
 
-async function upload(token, fileId, data) {
+const download = async (token, fileId) => (await api(token, `${API}/files/${fileId}?alt=media`)).json();
+
+async function upload(token, fileId, name, data) {
   const body = JSON.stringify(data);
   if (fileId) {
     await api(token, `${UPLOAD}/files/${fileId}?uploadType=media`, {
@@ -124,7 +134,7 @@ async function upload(token, fileId, data) {
     return;
   }
   const boundary = 'fittrack' + Date.now();
-  const meta = JSON.stringify({ name: FILE_NAME, parents: ['appDataFolder'] });
+  const meta = JSON.stringify({ name, parents: ['appDataFolder'] });
   const multipart =
     `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n` +
     `--${boundary}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${boundary}--`;
@@ -135,6 +145,17 @@ async function upload(token, fileId, data) {
   });
 }
 
+// Summaries of the other profiles on this Google account (read-only).
+async function readHousehold(token, files, ownId) {
+  const others = files.filter((f) => f.name.startsWith('fittrack-s-') && f.name !== summaryName(ownId));
+  const members = (await Promise.all(others.map((f) => download(token, f.id).catch(() => null)))).filter(Boolean);
+  localStorage.setItem(LS.household, JSON.stringify({ fetchedAt: new Date().toISOString(), members }));
+}
+
+export function household() {
+  try { return JSON.parse(localStorage.getItem(LS.household))?.members || []; } catch { return []; }
+}
+
 let syncing = null;
 
 // interactive=true when the user tapped a button (may show Google sign-in).
@@ -143,19 +164,34 @@ export function syncNow(interactive = false) {
   if (syncing) return syncing;
   syncing = (async () => {
     const token = await getToken(interactive);
-    if (!token) return { skipped: true };
-    const file = await findFile(token);
-    const remote = file
-      ? await (await api(token, `${API}/files/${file.id}?alt=media`)).json()
-      : null;
+    const profile = currentProfile();
+    if (!token || !profile) return { skipped: true };
+    const files = await listFiles(token);
+    const own = files.find((f) => f.name === dataName(profile.id));
+    const remote = own ? await download(token, own.id) : null;
     const merged = mergeStates(getState(), remote);
     replaceState(merged);
-    await upload(token, file?.id, merged);
+    await upload(token, own?.id, dataName(profile.id), merged);
+    const ownSummary = files.find((f) => f.name === summaryName(profile.id));
+    await upload(token, ownSummary?.id, summaryName(profile.id), summary(profile));
+    await readHousehold(token, files, profile.id);
     localStorage.setItem(LS.lastSync, new Date().toISOString());
     localStorage.setItem(LS.dirty, '0');
     return { ok: true };
   })().finally(() => { syncing = null; });
   return syncing;
+}
+
+// Profiles saved on this Google account, for setting up a phone with an existing profile.
+export async function remoteProfiles(interactive = true) {
+  const token = await getToken(interactive);
+  if (!token) return [];
+  const files = await listFiles(token);
+  const sums = files.filter((f) => f.name.startsWith('fittrack-s-'));
+  const all = await Promise.all(sums.map((f) => download(token, f.id).catch(() => null)));
+  return all
+    .filter((s) => s && files.some((f) => f.name === dataName(s.id)))
+    .map((s) => ({ id: s.id, name: s.name, updatedAt: s.updatedAt }));
 }
 
 export function disconnect() {
@@ -164,4 +200,5 @@ export function disconnect() {
   localStorage.removeItem(LS.token);
   localStorage.removeItem(LS.connected);
   localStorage.removeItem(LS.lastSync);
+  localStorage.removeItem(LS.household);
 }

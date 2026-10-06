@@ -1,8 +1,9 @@
-import { get, getState, upsert, remove, sessionProgress, sessionComplete, itemDone, rampPct, planWeek, timerOn } from '../store.js';
+import { get, getState, upsert, remove, sessionProgress, sessionComplete, itemDone, rampPct, planWeek, timerOn, addAdhocExercise } from '../store.js';
 import { esc, now, prettyDate, dateKey, num, fmtDuration } from '../util.js';
 import { icons, sheet, timer, toast, confirmSheet, unlockAudio } from '../ui.js';
 import { exerciseOf, targetText, setText, progressBar, backLink, unit } from './common.js';
 import { syncNow } from '../sync.js';
+import { exerciseOptions } from './plans.js';
 
 let sessionId = null;
 const session = () => get('sessions', sessionId);
@@ -23,7 +24,10 @@ function itemCard(it, i) {
     <section class="card item ${done ? 'done' : ''}" id="item-${i}">
       <div class="card-head">
         <h3>${done ? `<span class="ok">${icons.check}</span>` : ''}${esc(ex.name)}</h3>
-        <span class="badge">${it.sets.length}/${t.sets || 1}</span>
+        <span class="icon-group">
+          <span class="badge">${it.sets.length}/${t.sets || 1}</span>
+          ${session().adhoc ? `<button class="icon-btn" data-act="removeAdhocItem" data-i="${i}" aria-label="Remove ${esc(ex.name)}">${icons.trash}</button>` : ''}
+        </span>
       </div>
       <p class="target">${esc(targetText(t, ex, timerOn(it)))}${it.custom ? ' <span class="tag">custom today</span>' : ''}</p>
       ${ex.notes || ex.link ? `
@@ -60,6 +64,25 @@ export function render() {
   const complete = sessionComplete(s);
   const pct = plan ? rampPct(plan, s.date) : 100;
   const isToday = s.date === dateKey();
+
+  if (s.adhoc) {
+    return `
+      ${backLink(isToday ? '#/today' : '#/progress', isToday ? 'Today' : 'Progress')}
+      <header class="page-head">
+        <p class="muted">${esc(prettyDate(s.date))}</p>
+        <h1>Single exercises</h1>
+        <p class="muted small">Saved to your history. These don't count toward your streak.</p>
+      </header>
+      ${s.items.map((it, i) => itemCard(it, i)).join('')}
+      <section class="card form">
+        <label class="field"><span>Add an exercise</span>
+          <select data-act-change="adhocAdd"><option value="">Choose from library…</option>${exerciseOptions()}</select></label>
+      </section>
+      <div class="btn-col">
+        <button class="btn primary wide" data-act="finish">Done</button>
+        <button class="btn ghost danger-text" data-act="deleteSession">Delete all of today's single exercises</button>
+      </div>`;
+  }
 
   return `
     ${backLink(isToday ? '#/today' : '#/progress', isToday ? 'Today' : 'Progress')}
@@ -292,6 +315,21 @@ export const actions = {
     syncNow(false).catch(() => {});
     toast(sessionComplete(s) ? 'Workout saved. Great job! 💪' : 'Saved. Partial workouts count too.');
     location.hash = s.date === dateKey() ? '#/today' : '#/progress';
+  },
+
+  adhocAdd({ el }) {
+    if (!el.value) return;
+    const s = addAdhocExercise(el.value, session().date);
+    requestAnimationFrame(() => document.getElementById(`item-${s.items.length - 1}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+  },
+
+  async removeAdhocItem({ el }) {
+    const s = session();
+    const i = +el.dataset.i;
+    const it = s.items[i];
+    if (it.sets.length && !(await confirmSheet(`Remove ${it.name}?`, `Its ${it.sets.length} logged set(s) will be deleted.`, 'Remove', true))) return;
+    s.items.splice(i, 1);
+    save(s);
   },
 
   async deleteSession() {

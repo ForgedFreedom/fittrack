@@ -200,5 +200,7 @@ export const icons = {
   trash: svg('<path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/>'),
   back: svg('<path d="M15 6l-6 6 6 6"/>'),
   sync: svg('<path d="M20 12a8 8 0 0 1-14 5.3M4 12a8 8 0 0 1 14-5.3"/><path d="M18 3v4h-4M6 21v-4h4"/>'),
+  walk: svg('<circle cx="13" cy="4" r="2"/><path d="M9 21l3-7 3 3v5M7 12l3-4 4 1 3 4M12 14l-1-5"/>'),
+  scale: svg('<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 9a4 4 0 0 1 8 0zM12 9l1.5-2"/>'),
   fire: svg('<path d="M12 22c4 0 7-3 7-7 0-4-3-6-4-10-2 2-3 4-3 6-1-1-2-2-2-4-2 2-5 5-5 8 0 4 3 7 7 7z"/>'),
 };

@@ -1,6 +1,7 @@
 // App shell: hash router, event delegation, background sync.
 
 import { load, onChange } from './store.js';
+import { current as currentProfile, migrateLegacy } from './profiles.js';
 import { icons, toast } from './ui.js';
 import * as sync from './sync.js';
 import * as today from './views/today.js';
@@ -9,6 +10,7 @@ import * as plans from './views/plans.js';
 import * as exercises from './views/exercises.js';
 import * as progress from './views/progress.js';
 import * as settings from './views/settings.js';
+import * as profile from './views/profile.js';
 
 const routes = [
   { re: /^#\/today$/, view: today, tab: 'today' },
@@ -19,6 +21,7 @@ const routes = [
   { re: /^#\/exercise\/([\w-]+)$/, view: exercises.editView, tab: 'exercises', keys: ['id'] },
   { re: /^#\/progress$/, view: progress, tab: 'progress' },
   { re: /^#\/settings$/, view: settings, tab: 'settings' },
+  { re: /^#\/profiles$/, view: profile, tab: 'settings' },
 ];
 
 const TABS = [
@@ -26,9 +29,17 @@ const TABS = [
 ];
 
 // Actions from every screen, looked up by name from data-act / data-act-change.
-const ACTIONS = Object.assign({},
-  today.actions, workout.actions, plans.listView.actions, plans.editView.actions,
-  exercises.editView.actions, progress.actions, settings.actions);
+// Names must be unique across screens; a clash would silently run the wrong action.
+const ACTIONS = {};
+for (const group of [today.actions, workout.actions, plans.listView.actions, plans.editView.actions,
+  exercises.editView.actions, progress.actions, settings.actions, profile.actions]) {
+  for (const [name, fn] of Object.entries(group)) {
+    if (ACTIONS[name]) console.error(`Duplicate action name: ${name}`);
+    ACTIONS[name] = fn;
+  }
+}
+
+const WELCOME = { view: profile, tab: null };
 
 const viewEl = document.getElementById('view');
 let current = null;
@@ -51,9 +62,11 @@ function render() {
 }
 
 function navigate() {
-  const m = match();
+  // No profile on this phone yet: everything goes to the welcome screen.
+  const m = currentProfile() ? match() : { route: WELCOME, params: {} };
   current = m.route;
   params = m.params;
+  document.body.classList.toggle('no-tabs', !current.tab);
   current.view.enter?.(params);
   viewEl.innerHTML = current.view.render(params);
   scrollTo(0, 0);
@@ -115,7 +128,7 @@ onChange(() => {
 // the user taps "Sync now" in Settings.
 
 function backgroundSync() {
-  if (!sync.isConnected()) return;
+  if (!sync.isConnected() || !currentProfile()) return;
   sync.syncNow(false).catch((e) => console.warn('sync', e));
 }
 
@@ -126,7 +139,9 @@ document.addEventListener('visibilitychange', () => {
 
 // ---- start --------------------------------------------------------------------------------
 
-load();
+migrateLegacy();
+const me = currentProfile();
+if (me) load(me.id);
 renderTabs();
 addEventListener('hashchange', navigate);
 if (!location.hash) history.replaceState(null, '', '#/today');
@@ -134,6 +149,10 @@ navigate();
 sync.preload().catch(() => {});
 backgroundSync();
 navigator.storage?.persist?.();
+
+// Message carried over a reload (e.g. after switching profiles).
+const pendingToast = sessionStorage.getItem('fittrack:toast');
+if (pendingToast) { sessionStorage.removeItem('fittrack:toast'); toast(pendingToast, 3500); }
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').then((reg) => {

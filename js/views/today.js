@@ -1,8 +1,12 @@
-import { list, isScheduled, sessionFor, sessionProgress, sessionComplete, startSession, getState, rampPct, planWeek } from '../store.js';
+import { list, isScheduled, sessionFor, sessionProgress, sessionComplete, startSession, getState, rampPct, planWeek, adhocFor, addAdhocExercise } from '../store.js';
 import { esc, dateKey, prettyDate } from '../util.js';
-import { icons } from '../ui.js';
+import { icons, sheet } from '../ui.js';
 import * as sync from '../sync.js';
+import { current as currentProfile } from '../profiles.js';
+import { summary } from '../stats.js';
 import { progressBar, scheduleText, streaks, emptyState } from './common.js';
+import { exerciseOptions } from './plans.js';
+import { activitySheet, weightSheet, activityText } from './logsheets.js';
 
 function planCard(plan, today, scheduled) {
   const s = sessionFor(plan.id, today);
@@ -24,12 +28,56 @@ function planCard(plan, today, scheduled) {
     </section>`;
 }
 
+const ago = (iso) => {
+  const mins = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (mins < 60) return mins <= 1 ? 'just now' : `${mins} min ago`;
+  const h = Math.round(mins / 60);
+  return h < 24 ? `${h} h ago` : new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
+
+function memberCard(m, isMe) {
+  const fresh = m.date === dateKey();
+  const week = [`${m.week.workouts} workout${m.week.workouts === 1 ? '' : 's'}`];
+  if (m.week.distance) week.push(`${m.week.distance} ${m.distUnit}`);
+  return `
+    <div class="member">
+      <div class="row-between">
+        <b>${esc(isMe ? `${m.name} (you)` : m.name)}</b>
+        <span class="streak">${icons.fire}${m.streak}</span>
+      </div>
+      <p class="muted small">This week: ${esc(week.join(' · '))}</p>
+      ${fresh
+        ? (m.today.length
+          ? `<div class="mini-plans">${m.today.map((p) => `<span class="mini ${p.done ? 'done' : ''}">${p.done ? '✓' : `${p.pct}%`} ${esc(p.name)}</span>`).join('')}</div>`
+          : '<p class="muted small">Rest day</p>')
+        : '<p class="muted small">Not updated today</p>'}
+      ${isMe ? '' : `<p class="muted tiny">Updated ${esc(ago(m.updatedAt))}</p>`}
+    </div>`;
+}
+
+function householdSection() {
+  const others = sync.isConnected() ? sync.household() : [];
+  if (!others.length) return '';
+  const me = summary(currentProfile());
+  return `
+    <div class="row-between section-title-row">
+      <h2 class="section-title">Household</h2>
+      <button class="btn ghost small" data-act="syncNow" aria-label="Refresh household">${icons.sync}</button>
+    </div>
+    <div class="household">
+      ${memberCard(me, true)}
+      ${others.map((m) => memberCard(m, false)).join('')}
+    </div>`;
+}
+
 export function render() {
   const today = dateKey();
   const name = getState().settings.name;
   const active = list('plans').filter((p) => p.active);
   const due = active.filter((p) => isScheduled(p, today));
   const other = active.filter((p) => !isScheduled(p, today));
+  const adhoc = adhocFor(today);
+  const acts = list('activities').filter((a) => a.date === today);
   const { current, best } = streaks();
 
   const hour = new Date().getHours();
@@ -49,12 +97,35 @@ export function render() {
       <div class="stat"><span class="stat-num">${best}</span><span class="stat-label">best streak</span></div>
     </div>
 
+    <div class="quick-add" role="group" aria-label="Quick add">
+      <button class="btn" data-act="logSingleExercise">${icons.exercises}<span>Exercise</span></button>
+      <button class="btn" data-act="logActivity">${icons.walk}<span>Walk / run</span></button>
+      <button class="btn" data-act="logWeight">${icons.scale}<span>Weight</span></button>
+    </div>
+
+    ${householdSection()}
+
     <h2 class="section-title">Today</h2>
     ${due.length
       ? due.map((p) => planCard(p, today, true)).join('')
       : active.length
-        ? emptyState('Nothing scheduled today. Enjoy the rest day, or pick one below.')
+        ? emptyState('No plans scheduled today. Enjoy the rest day, or pick one below.')
         : emptyState('No active plans yet.', `<a class="btn primary" href="#/plans">Choose a plan</a>`)}
+
+    ${adhoc?.items.length ? `
+      <section class="card">
+        <div class="card-head"><h3>Single exercises</h3><span class="muted small">${adhoc.items.length} logged today</span></div>
+        <p class="muted small">${esc(adhoc.items.map((it) => it.name).join(', '))}</p>
+        <a class="btn" href="#/workout/${adhoc.id}">Open</a>
+      </section>` : ''}
+
+    ${acts.length ? `
+      <div class="list card">
+        ${acts.map((a) => `
+          <button class="list-row as-button" data-act="editActivity" data-id="${a.id}">
+            <span>${icons.walk} ${esc(a.type)}</span><span class="muted small">${esc(activityText(a))}</span>
+          </button>`).join('')}
+      </div>` : ''}
 
     ${other.length ? `
       <h2 class="section-title">Other active plans</h2>
@@ -67,4 +138,22 @@ export const actions = {
     const s = startSession(el.dataset.plan, dateKey());
     location.hash = `#/workout/${s.id}`;
   },
+
+  async logSingleExercise() {
+    const { value, form } = await sheet({
+      title: 'Log a single exercise',
+      body: `
+        <label class="field"><span>Exercise</span>
+          <select name="exercise">${exerciseOptions()}</select></label>
+        <p class="muted small">Single exercises are saved to your history but don't count toward your streak. Not in the list? Add it under Exercises first.</p>`,
+      buttons: [{ label: 'Go', value: 'go', cls: 'primary' }, { label: 'Cancel', value: null }],
+    });
+    if (value !== 'go' || !form.exercise) return;
+    const s = addAdhocExercise(form.exercise);
+    location.hash = `#/workout/${s.id}`;
+  },
+
+  logActivity: () => activitySheet(),
+  editActivity: ({ el }) => activitySheet(el.dataset.id),
+  logWeight: () => weightSheet(),
 };

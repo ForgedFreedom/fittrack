@@ -1,7 +1,7 @@
 // Formatting helpers shared by several screens.
 
-import { get, getState, list, sessionComplete } from '../store.js';
-import { esc, fmtDuration, DAY_NAMES, dateKey, addDays } from '../util.js';
+import { get, getState } from '../store.js';
+import { esc, fmtDuration, DAY_NAMES } from '../util.js';
 
 const MISSING = { name: 'Removed exercise', track: { reps: true }, perSide: false, notes: '' };
 
@@ -49,29 +49,7 @@ export const progressBar = (frac, label = '') => `
 export const backLink = (href, label) =>
   `<a class="back" href="${href}">‹ ${esc(label)}</a>`;
 
-// Days (YYYY-MM-DD) on which at least one session was fully completed.
-export function completedDays() {
-  const days = new Set();
-  for (const s of list('sessions')) if (sessionComplete(s)) days.add(s.date);
-  return days;
-}
-
-// Current streak counts back from today; if today isn't done yet, from yesterday.
-export function streaks() {
-  const days = completedDays();
-  let current = 0;
-  let d = dateKey();
-  if (!days.has(d)) d = addDays(d, -1);
-  while (days.has(d)) { current++; d = addDays(d, -1); }
-
-  let best = 0, run = 0, prev = null;
-  for (const day of [...days].sort()) {
-    run = prev && addDays(prev, 1) === day ? run + 1 : 1;
-    best = Math.max(best, run);
-    prev = day;
-  }
-  return { current, best };
-}
+export { streaks } from '../stats.js';
 
 export const emptyState = (msg, actionHtml = '') =>
   `<div class="empty"><p>${esc(msg)}</p>${actionHtml}</div>`;

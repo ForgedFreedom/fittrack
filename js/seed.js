@@ -1,7 +1,11 @@
 // Starter library and plans. Fixed ids so two devices seeded separately
 // don't create duplicates when they sync.
 
-import { now, dateKey } from './util.js';
+import { dateKey } from './util.js';
+
+// Starter records carry an old timestamp, so any real edit (on any device) wins
+// when syncing, and a freshly seeded phone never overwrites your changes.
+export const SEED_TIME = '2000-01-01T00:00:00.000Z';
 
 const R = { reps: true };
 const W = { reps: true, weight: true };
@@ -48,7 +52,7 @@ const item = (id, exerciseId, sets, reps, extra = {}) => ({
 });
 
 export function seedData(state) {
-  const t = now();
+  const t = SEED_TIME;
   for (const [id, name, category, track, perSide, notes] of EXERCISES) {
     state.exercises[id] = {
       id, name, category, perSide, notes, link: '',

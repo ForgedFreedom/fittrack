@@ -1,6 +1,6 @@
 // Offline support: cache the app files, serve them cache-first, and refresh
 // the cache in the background. Bump VERSION whenever you deploy changes.
-const VERSION = 'fittrack-v3';
+const VERSION = 'fittrack-v4';
 const FILES = [
   './',
   'index.html',
@@ -8,14 +8,18 @@ const FILES = [
   'css/app.css',
   'js/app.js',
   'js/config.js',
+  'js/profiles.js',
   'js/seed.js',
+  'js/stats.js',
   'js/store.js',
   'js/sync.js',
   'js/ui.js',
   'js/util.js',
   'js/views/common.js',
   'js/views/exercises.js',
+  'js/views/logsheets.js',
   'js/views/plans.js',
+  'js/views/profile.js',
   'js/views/progress.js',
   'js/views/settings.js',
   'js/views/today.js',

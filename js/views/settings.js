@@ -1,4 +1,5 @@
-import { getState, updateSettings, mergeStates, replaceState, load } from '../store.js';
+import { getState, updateSettings, mergeStates, replaceState } from '../store.js';
+import { current as currentProfile, rename } from '../profiles.js';
 import { esc, dateKey, num } from '../util.js';
 import { icons, toast, confirmSheet } from '../ui.js';
 import * as sync from '../sync.js';
@@ -12,7 +13,7 @@ function syncCard() {
   const last = sync.lastSync();
   return `
     <section class="card form">
-      <p class="small">Back up and sync your data to <b>your own Google Drive</b>, in a private app folder only this app can see. Each person signs in with their own Google account, so your data stays separate.</p>
+      <p class="small">Back up and sync to Google Drive, in a private app folder only this app can see. Profiles that sign in to the <b>same Google account</b> keep separate data but can see each other's streaks on the Today screen.</p>
       ${id ? '' : `<p class="small warn">One-time setup: a Google Client ID is needed. See README → "Google Drive sync".</p>`}
       <details ${id ? '' : 'open'}><summary class="small">Google Client ID</summary>
         <label class="field"><span>Client ID</span>
@@ -32,14 +33,26 @@ export function render() {
   return `
     <header class="page-head"><h1>Settings</h1></header>
 
+    <a class="card list-row profile-link" href="#/profiles">
+      <span><span class="muted small">Profile on this phone</span><br><b>${esc(currentProfile()?.name || '')}</b></span>
+      <span class="small">Switch / add ›</span>
+    </a>
+
     <section class="card form">
       <label class="field"><span>Your name</span>
         <input data-setting="name" value="${esc(st.name)}" placeholder="Shown on the Today screen" autocomplete="given-name"></label>
-      <label class="field"><span>Weight unit</span>
-        <select data-setting="unit">
-          <option value="lb" ${st.unit === 'lb' ? 'selected' : ''}>Pounds (lb)</option>
-          <option value="kg" ${st.unit === 'kg' ? 'selected' : ''}>Kilograms (kg)</option>
-        </select></label>
+      <div class="field-grid">
+        <label class="field"><span>Weight unit</span>
+          <select data-setting="unit">
+            <option value="lb" ${st.unit === 'lb' ? 'selected' : ''}>Pounds (lb)</option>
+            <option value="kg" ${st.unit === 'kg' ? 'selected' : ''}>Kilograms (kg)</option>
+          </select></label>
+        <label class="field"><span>Distance unit</span>
+          <select data-setting="distUnit">
+            <option value="mi" ${(st.distUnit || 'mi') === 'mi' ? 'selected' : ''}>Miles (mi)</option>
+            <option value="km" ${st.distUnit === 'km' ? 'selected' : ''}>Kilometers (km)</option>
+          </select></label>
+      </div>
     </section>
 
     <h2 class="section-title">Workout timers</h2>
@@ -85,6 +98,7 @@ export function onSetting(el) {
     : el.type === "number" ? Math.max(0, Math.round(num(el.value)))
     : el.value.trim();
   updateSettings({ [key]: value });
+  if (key === 'name' && value) rename(currentProfile().id, value);
   return false;
 }
 
@@ -127,10 +141,9 @@ export const actions = {
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   },
   async resetAll() {
-    if (!(await confirmSheet('Erase everything?', 'All plans, exercises and history on this phone will be deleted and the starter data restored. Data already synced to Google Drive is not touched, but a later sync will bring it back.', 'Erase', true))) return;
-    localStorage.removeItem('fittrack:data:v1');
+    if (!(await confirmSheet('Erase everything on this phone?', 'All profiles, plans, exercises and history on this phone will be deleted. Data already synced to Google Drive is not touched, and can be restored by picking your profile from Google Drive.', 'Erase', true))) return;
     sync.disconnect();
-    load();
+    Object.keys(localStorage).filter((k) => k.startsWith('fittrack:')).forEach((k) => localStorage.removeItem(k));
     location.hash = '#/today';
     location.reload();
   },

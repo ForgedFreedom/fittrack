@@ -3,40 +3,57 @@
 // syncing between devices can merge record-by-record (last write wins).
 
 import { uid, now, dateKey, parseDateKey, daysBetween } from './util.js';
-import { seedData } from './seed.js';
+import { seedData, SEED_TIME } from './seed.js';
 
-const KEY = 'fittrack:data:v1';
-const COLLECTIONS = ['exercises', 'plans', 'sessions'];
+// Each profile (person) has its own blob: fittrack:data:v1:<profileId>.
+const keyFor = (profileId) => `fittrack:data:v1:${profileId}`;
+export const COLLECTIONS = ['exercises', 'plans', 'sessions', 'activities', 'weights'];
 
 let state;
+let key;
 const listeners = new Set();
 
-function emptyState() {
+// Defaults are stamped with an old time so that real edits always win a merge.
+export function emptyState() {
   return {
     version: 1,
-    settings: { name: '', unit: 'lb', autoStart: true, grace: 2, updatedAt: now() },
+    settings: { name: '', unit: 'lb', distUnit: 'mi', autoStart: true, grace: 2, updatedAt: SEED_TIME },
     exercises: {},
     plans: {},
     sessions: {},
+    activities: {},
+    weights: {},
   };
 }
 
-export function load() {
+export function newState({ seed = true, name = '' } = {}) {
+  const st = emptyState();
+  if (seed) seedData(st);
+  if (name) st.settings = { ...st.settings, name, updatedAt: now() };
+  return st;
+}
+
+export function writeInitial(profileId, st) {
+  localStorage.setItem(keyFor(profileId), JSON.stringify(st));
+}
+
+export function load(profileId) {
+  key = keyFor(profileId);
   try {
-    state = JSON.parse(localStorage.getItem(KEY));
+    state = JSON.parse(localStorage.getItem(key));
   } catch {
     state = null;
   }
   if (!state || state.version !== 1) {
-    state = emptyState();
-    seedData(state);
+    state = newState();
     persist();
   }
+  for (const c of COLLECTIONS) state[c] ||= {}; // data saved before a collection existed
   return state;
 }
 
 function persist() {
-  localStorage.setItem(KEY, JSON.stringify(state));
+  localStorage.setItem(key, JSON.stringify(state));
   localStorage.setItem('fittrack:dirty', '1');
 }
 
@@ -95,9 +112,9 @@ export function mergeStates(local, remote) {
   const out = emptyState();
   out.settings = newer(local.settings, remote.settings);
   for (const coll of COLLECTIONS) {
-    const ids = new Set([...Object.keys(local[coll]), ...Object.keys(remote[coll] || {})]);
+    const ids = new Set([...Object.keys(local[coll] || {}), ...Object.keys(remote[coll] || {})]);
     for (const id of ids) {
-      const a = local[coll][id];
+      const a = local[coll]?.[id];
       const b = remote[coll]?.[id];
       out[coll][id] = a && b ? newer(a, b) : a || b;
     }
@@ -212,3 +229,48 @@ export function sessionProgress(s) {
 }
 
 export const sessionComplete = (s) => s.items.length > 0 && s.items.every(itemDone);
+
+// ---- single exercises (no plan) ----------------------------------------------------
+// One "single exercises" session per day; exercises are added to it as you go.
+
+export function defaultItem(exerciseId) {
+  const ex = get('exercises', exerciseId);
+  const track = ex?.track || { reps: true };
+  return {
+    id: uid(),
+    exerciseId,
+    sets: 3,
+    reps: track.reps ? 10 : 0,
+    duration: track.duration ? 30 : 0,
+    weight: 0,
+    rest: 45,
+    timer: true, // on by default; 0 seconds = stopwatch
+  };
+}
+
+export const adhocFor = (key = dateKey()) =>
+  list('sessions').find((s) => s.adhoc && s.date === key) || null;
+
+export function addAdhocExercise(exerciseId, key = dateKey()) {
+  const s = adhocFor(key) || { adhoc: true, planId: null, date: key, startedAt: now(), items: [] };
+  const pi = defaultItem(exerciseId);
+  s.items.push({
+    itemId: pi.id,
+    exerciseId,
+    name: get('exercises', exerciseId)?.name,
+    target: targetFor(pi, { ramp: [] }, key),
+    timer: true,
+    custom: false,
+    sets: [],
+  });
+  return upsert('sessions', s);
+}
+
+// ---- body weight ------------------------------------------------------------------------
+// One entry per day, keyed by date so two devices logging the same day don't duplicate.
+
+export function logWeight(date, weight) {
+  return upsert('weights', { id: `w-${date}`, date, weight });
+}
+
+export const weightsSorted = () => list('weights').sort((a, b) => a.date.localeCompare(b.date));

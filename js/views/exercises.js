@@ -1,4 +1,4 @@
-import { list, get, upsert, remove } from '../store.js';
+import { list, get, upsert, remove, addAdhocExercise } from '../store.js';
 import { esc, num, dateKey } from '../util.js';
 import { icons, toast, confirmSheet, sheet } from '../ui.js';
 import { backLink, emptyState } from './common.js';
@@ -89,7 +89,10 @@ export const editView = {
           ${usedIn.length
             ? `<p class="small">Used in: ${usedIn.map((p) => `<a href="#/plan/${p.id}">${esc(p.name)}</a>`).join(', ')}</p>`
             : '<p class="muted small">Not in any plan yet.</p>'}
-          <button class="btn small" data-act="addToPlan">${icons.plus} Add to a plan</button>
+          <div class="btn-row">
+            <button class="btn small" data-act="addToPlan">${icons.plus} Add to a plan</button>
+            <button class="btn small" data-act="logExerciseNow">${icons.play} Log it now</button>
+          </div>
         </section>
         <div class="btn-col">
           <button class="btn ghost danger-text" data-act="deleteExercise">Delete exercise</button>
@@ -114,6 +117,11 @@ export const editView = {
       toast('Exercise saved');
       if (isNew) location.hash = `#/exercise/${saved.id}`; // stay, so it can be added to a plan
       else location.hash = '#/exercises';
+    },
+
+    logExerciseNow() {
+      const s = addAdhocExercise(draft.id);
+      location.hash = `#/workout/${s.id}`;
     },
 
     async addToPlan() {
