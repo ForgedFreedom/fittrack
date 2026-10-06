@@ -19,6 +19,9 @@ Each person has their own **profile** on their own phone, with separate plans an
   per-exercise charts (total reps, heaviest weight, total time), personal bests, and history.
 - **Household**: profiles that sync to the same Google account see each other's streak, workouts and
   distance this week, and today's plans on the Today screen (body weight is never shared).
+- **Share a plan**: in the plan editor, "Share with household" sends a copy to another profile on the
+  same Google account. It appears on their Today screen after their next sync, with Add / Dismiss.
+  Each copy is independent after that.
 - **Sync & backup**: optional Google Drive sync to a private app folder, plus export/import of a backup file.
 
 Starter data includes the "100 Reps Daily" plan (4 moves, ramping from ~50 to 100 reps each,
@@ -91,6 +94,7 @@ css/app.css            styles (light + dark mode)
 js/app.js              router, events, background sync
 js/profiles.js         profiles on this phone, legacy data migration
 js/stats.js            streaks, weekly numbers, household summary
+js/share.js            sending/receiving plan copies between profiles
 js/store.js            data model, schedule/ramp logic, merge
 js/seed.js             starter exercises and plans
 js/sync.js             Google Drive sync

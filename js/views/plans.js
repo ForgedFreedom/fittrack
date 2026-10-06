@@ -2,6 +2,8 @@ import { list, get, upsert, remove, timerOn } from '../store.js';
 import { esc, uid, dateKey, DAY_NAMES, num } from '../util.js';
 import { icons, sheet, toast, confirmSheet } from '../ui.js';
 import { scheduleText, backLink, exerciseOf, targetText, emptyState } from './common.js';
+import * as sync from '../sync.js';
+import { buildShare } from '../share.js';
 
 // ---- shared ---------------------------------------------------------------------
 
@@ -132,6 +134,7 @@ export const editView = {
       <div class="btn-col">
         <button class="btn primary wide" data-act="savePlan">Save plan</button>
         ${d.id ? `
+          <button class="btn wide" data-act="sharePlan">${icons.share} Share with household</button>
           <button class="btn wide" data-act="duplicatePlan">Duplicate</button>
           <button class="btn ghost danger-text" data-act="deletePlan">Delete plan</button>` : ''}
       </div>
@@ -193,6 +196,34 @@ export const editView = {
       toast('Plan saved');
       location.hash = '#/plans';
     },
+    async sharePlan() {
+      const people = sync.isConnected() ? sync.household() : [];
+      if (!people.length) {
+        toast(sync.isConnected()
+          ? 'No one else has synced on this Google account yet'
+          : 'Connect Google Drive in Settings to share plans', 4000);
+        return;
+      }
+      // Share what's saved, so unsaved edits on this screen aren't sent by surprise.
+      const saved = get('plans', draft.id);
+      const { value, form } = await sheet({
+        title: `Share “${saved.name}”`,
+        body: `
+          <label class="field"><span>Send a copy to</span>
+            <select name="to">${people.map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('')}</select></label>
+          <p class="muted small">They get their own copy to add from their Today screen. Changes either of you make later stay separate.</p>`,
+        buttons: [{ label: 'Send', value: 'send', cls: 'primary' }, { label: 'Cancel', value: null }],
+      });
+      if (value !== 'send') return;
+      const to = people.find((m) => m.id === form.to);
+      try {
+        await sync.sendShare(to.id, buildShare(saved.id));
+        toast(`Sent to ${to.name}. It shows up when their app next syncs.`, 4000);
+      } catch (e) {
+        toast(e.message, 4000);
+      }
+    },
+
     duplicatePlan() {
       const copy = structuredClone(draft);
       copy.id = null;

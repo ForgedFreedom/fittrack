@@ -123,6 +123,9 @@ onChange(() => {
   render();
 });
 
+// A sync finished: refresh screens that show synced info (household, shared plans, backup button).
+addEventListener('fittrack:synced', () => { if (current?.view === today || current?.view === settings) render(); });
+
 // ---- background sync --------------------------------------------------------------------
 // Only runs when a Google sign-in from the last hour is still valid; otherwise
 // the user taps "Sync now" in Settings.

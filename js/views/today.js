@@ -1,6 +1,7 @@
 import { list, isScheduled, sessionFor, sessionProgress, sessionComplete, startSession, getState, rampPct, planWeek, adhocFor, addAdhocExercise } from '../store.js';
 import { esc, dateKey, prettyDate } from '../util.js';
-import { icons, sheet } from '../ui.js';
+import { icons, sheet, toast } from '../ui.js';
+import { inbox, accept, dismiss } from '../share.js';
 import * as sync from '../sync.js';
 import { current as currentProfile } from '../profiles.js';
 import { summary } from '../stats.js';
@@ -92,6 +93,17 @@ export function render() {
     ${sync.isConnected() && sync.isDirty() ? `
       <button class="btn small sync-nudge" data-act="syncNow">${icons.sync} Back up to Google Drive</button>` : ''}
 
+    ${inbox().map((s) => `
+      <section class="card share-card">
+        <p>${icons.share} <b>${esc(s.from.name)}</b> shared a plan with you</p>
+        <h3>${esc(s.plan.name)}</h3>
+        <p class="muted small">${s.plan.items.length} exercises · ${esc(scheduleText(s.plan))}</p>
+        <div class="btn-row">
+          <button class="btn primary" data-act="acceptShare" data-id="${s.inboxId}">Add plan</button>
+          <button class="btn" data-act="dismissShare" data-id="${s.inboxId}">Dismiss</button>
+        </div>
+      </section>`).join('')}
+
     <div class="stat-row">
       <div class="stat"><span class="stat-num">${icons.fire}${current}</span><span class="stat-label">day streak</span></div>
       <div class="stat"><span class="stat-num">${best}</span><span class="stat-label">best streak</span></div>
@@ -152,6 +164,12 @@ export const actions = {
     const s = addAdhocExercise(form.exercise);
     location.hash = `#/workout/${s.id}`;
   },
+
+  acceptShare({ el }) {
+    const plan = accept(el.dataset.id);
+    if (plan) toast(`“${plan.name}” added to your plans`, 3500);
+  },
+  dismissShare({ el }) { dismiss(el.dataset.id); },
 
   logActivity: () => activitySheet(),
   editActivity: ({ el }) => activitySheet(el.dataset.id),

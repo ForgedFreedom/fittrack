@@ -351,3 +351,8 @@ body.no-tabs .tabbar { display: none; }
 .lg-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
 .lg-line { width: 16px; height: 2px; background: var(--accent); display: inline-block; }
 .lg-dash { width: 16px; height: 0; border-top: 2px dashed var(--text-2); display: inline-block; }
+
+/* shared-plan card */
+.share-card { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+.share-card p:first-child { display: flex; align-items: center; gap: 6px; margin-top: 0; }
+.share-card svg { width: 18px; height: 18px; color: var(--accent); }

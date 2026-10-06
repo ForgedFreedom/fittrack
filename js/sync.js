@@ -7,6 +7,7 @@ import { GOOGLE_CLIENT_ID } from './config.js';
 import { getState, replaceState, mergeStates } from './store.js';
 import { current as currentProfile } from './profiles.js';
 import { summary } from './stats.js';
+import { addToInbox } from './share.js';
 
 const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 const API = 'https://www.googleapis.com/drive/v3';
@@ -18,7 +19,6 @@ const LS = {
   token: 'fittrack:gtoken',
   lastSync: 'fittrack:lastsync',
   dirty: 'fittrack:dirty',
-  household: 'fittrack:household',
 };
 
 let tokenClient = null;
@@ -112,6 +112,9 @@ async function api(token, url, opts = {}) {
 // Drive files, all in the hidden app folder of the signed-in Google account:
 //   fittrack-p-<profileId>.json  full data for one profile
 //   fittrack-s-<profileId>.json  small shareable summary (streaks, this week, today's plans)
+// Household info is cached per profile, so switching profiles never shows stale people.
+const householdKey = () => `fittrack:household:${currentProfile()?.id}`;
+
 const dataName = (id) => `fittrack-p-${id}.json`;
 const summaryName = (id) => `fittrack-s-${id}.json`;
 
@@ -149,11 +152,33 @@ async function upload(token, fileId, name, data) {
 async function readHousehold(token, files, ownId) {
   const others = files.filter((f) => f.name.startsWith('fittrack-s-') && f.name !== summaryName(ownId));
   const members = (await Promise.all(others.map((f) => download(token, f.id).catch(() => null)))).filter(Boolean);
-  localStorage.setItem(LS.household, JSON.stringify({ fetchedAt: new Date().toISOString(), members }));
+  localStorage.setItem(householdKey(), JSON.stringify({ fetchedAt: new Date().toISOString(), members }));
+}
+
+// ---- sharing plans between profiles ----------------------------------------------------------
+//   fittrack-share-<toProfileId>-<random>.json  a plan sent to that profile
+
+// Move plans shared with this profile into its inbox, then remove them from Drive.
+async function collectShares(token, files, ownId) {
+  for (const f of files.filter((x) => x.name.startsWith(`fittrack-share-${ownId}-`))) {
+    const data = await download(token, f.id).catch(() => null);
+    if (data) addToInbox(data);
+    await api(token, `${API}/files/${f.id}`, { method: 'DELETE' }).catch(() => {});
+  }
+}
+
+export async function sendShare(toProfileId, payload) {
+  const token = await getToken(true);
+  if (!token) throw new Error('Connect Google Drive in Settings first');
+  const name = `fittrack-share-${toProfileId}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}.json`;
+  await upload(token, null, name, payload);
 }
 
 export function household() {
-  try { return JSON.parse(localStorage.getItem(LS.household))?.members || []; } catch { return []; }
+  const me = currentProfile()?.id;
+  try {
+    return (JSON.parse(localStorage.getItem(householdKey()))?.members || []).filter((m) => m.id !== me);
+  } catch { return []; }
 }
 
 let syncing = null;
@@ -175,8 +200,10 @@ export function syncNow(interactive = false) {
     const ownSummary = files.find((f) => f.name === summaryName(profile.id));
     await upload(token, ownSummary?.id, summaryName(profile.id), summary(profile));
     await readHousehold(token, files, profile.id);
+    await collectShares(token, files, profile.id);
     localStorage.setItem(LS.lastSync, new Date().toISOString());
     localStorage.setItem(LS.dirty, '0');
+    dispatchEvent(new Event('fittrack:synced')); // household cards, shared plans, backup button
     return { ok: true };
   })().finally(() => { syncing = null; });
   return syncing;
@@ -200,5 +227,5 @@ export function disconnect() {
   localStorage.removeItem(LS.token);
   localStorage.removeItem(LS.connected);
   localStorage.removeItem(LS.lastSync);
-  localStorage.removeItem(LS.household);
+  Object.keys(localStorage).filter((k) => k.startsWith('fittrack:household')).forEach((k) => localStorage.removeItem(k));
 }
