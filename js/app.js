@@ -2,7 +2,7 @@
 
 import { load, onChange } from './store.js';
 import { current as currentProfile, migrateLegacy } from './profiles.js';
-import { icons, toast } from './ui.js';
+import { icons, toast, sheet } from './ui.js';
 import * as sync from './sync.js';
 import * as today from './views/today.js';
 import * as workout from './views/workout.js';
@@ -85,6 +85,35 @@ async function runAction(name, el, ev) {
   const settled = result instanceof Promise ? await result : result;
   if (settled !== false) render();
 }
+
+// ---- unsaved changes ----------------------------------------------------------------
+// Leaving an editor (tab bar, back link, any other link) with unsaved changes asks first.
+
+document.addEventListener('click', async (ev) => {
+  const a = ev.target.closest('a[href^="#"]');
+  if (!a || !current?.view.isDirty?.()) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  const target = a.getAttribute('href');
+  const view = current.view;
+  const { value } = await sheet({
+    title: 'Save your changes?',
+    body: '<p>You have changes on this screen that haven\'t been saved yet.</p>',
+    buttons: [
+      { label: 'Save', value: 'save', cls: 'primary' },
+      { label: 'Discard changes', value: 'discard', cls: 'danger' },
+      { label: 'Keep editing', value: null },
+    ],
+  });
+  if (value === 'save' && view.commit()) location.hash = target;
+  if (value === 'discard') { view.discard(); location.hash = target; }
+}, true);
+
+// Reloading or closing in a desktop browser. (iOS can't show this, which is why
+// editors also keep a draft on the phone.)
+addEventListener('beforeunload', (ev) => {
+  if (current?.view.isDirty?.()) { ev.preventDefault(); ev.returnValue = ''; }
+});
 
 // ---- events -----------------------------------------------------------------------
 

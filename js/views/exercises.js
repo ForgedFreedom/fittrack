@@ -3,6 +3,7 @@ import { esc, num, dateKey } from '../util.js';
 import { icons, toast, confirmSheet, sheet } from '../ui.js';
 import { backLink, emptyState } from './common.js';
 import { newItem } from './plans.js';
+import { Draft } from '../drafts.js';
 
 let query = '';
 
@@ -41,16 +42,20 @@ export const listView = {
 };
 
 let draft = null;
+const ed = new Draft('exercise');
 
 export const editView = {
   enter({ id }) {
-    draft = id === 'new'
+    const ex = id === 'new'
       ? { id: null, name: '', category: '', perSide: false, notes: '', link: '', track: { reps: true, weight: false, duration: false } }
-      : structuredClone(get('exercises', id));
+      : get('exercises', id);
+    draft = ex ? ed.begin(ex.id, structuredClone(ex)) : null;
+    if (ed.restored) setTimeout(() => toast('Restored your unsaved changes', 3500));
   },
 
   render() {
     if (!draft) return `${backLink('#/exercises', 'Exercises')}<p>Exercise not found.</p>`;
+    ed.persist();
     const d = draft;
     const cats = [...new Set(list('exercises').map((e) => e.category).filter(Boolean))].sort();
     const usedIn = d.id ? list('plans').filter((p) => p.items.some((it) => it.exerciseId === d.id)) : [];
@@ -104,27 +109,42 @@ export const editView = {
     const v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? num(el.value) : el.value;
     const [a, b] = el.dataset.bind.split('.');
     if (b) draft[a][b] = v; else draft[a] = v;
+    ed.persist();
     return false;
+  },
+
+  // Used by the "unsaved changes" prompt when leaving this screen.
+  isDirty: () => ed.dirty(),
+  discard: () => ed.discard(),
+  commit() {
+    if (!draft.name.trim()) { toast('Give the exercise a name'); return false; }
+    draft.name = draft.name.trim();
+    draft.category = draft.category.trim() || 'Other';
+    // Store a copy, so later edits on this screen don't change the saved exercise until saved again.
+    const saved = upsert('exercises', structuredClone(draft));
+    draft.id = saved.id;
+    draft.updatedAt = saved.updatedAt;
+    ed.saved(saved.id);
+    toast('Exercise saved');
+    return true;
   },
 
   actions: {
     saveExercise() {
-      if (!draft.name.trim()) return toast('Give the exercise a name');
-      draft.name = draft.name.trim();
-      draft.category = draft.category.trim() || 'Other';
       const isNew = !draft.id;
-      const saved = upsert('exercises', draft);
-      toast('Exercise saved');
-      if (isNew) location.hash = `#/exercise/${saved.id}`; // stay, so it can be added to a plan
+      if (!editView.commit()) return;
+      if (isNew) location.hash = `#/exercise/${draft.id}`; // stay, so it can be added to a plan
       else location.hash = '#/exercises';
     },
 
     logExerciseNow() {
+      if (ed.dirty() && !editView.commit()) return; // save changes before leaving
       const s = addAdhocExercise(draft.id);
       location.hash = `#/workout/${s.id}`;
     },
 
     async addToPlan() {
+      if (ed.dirty() && !editView.commit()) return; // save changes before leaving
       const plans = list('plans').sort((a, b) => a.name.localeCompare(b.name));
       const { value, form } = await sheet({
         title: `Add "${draft.name}" to…`,
@@ -163,6 +183,7 @@ export const editView = {
         upsert('plans', p);
       }
       remove('exercises', draft.id);
+      ed.discard();
       location.hash = '#/exercises';
     },
   },

@@ -1,7 +1,8 @@
 import { list, get, upsert, remove, timerOn } from '../store.js';
 import { esc, uid, dateKey, DAY_NAMES, num } from '../util.js';
 import { icons, sheet, toast, confirmSheet } from '../ui.js';
-import { scheduleText, backLink, exerciseOf, targetText, emptyState } from './common.js';
+import { scheduleText, backLink, exerciseOf, targetText, emptyState, unit } from './common.js';
+import { Draft } from '../drafts.js';
 import * as sync from '../sync.js';
 import { buildShare } from '../share.js';
 
@@ -77,16 +78,20 @@ export const listView = {
 // ---- plan editor ------------------------------------------------------------------------
 
 let draft = null;
+const ed = new Draft('plan');
 
 export const editView = {
   enter({ id }) {
-    draft = id === 'new'
+    const plan = id === 'new'
       ? { id: null, name: '', description: '', active: true, days: [], startDate: dateKey(), ramp: [], items: [] }
-      : structuredClone(get('plans', id));
+      : get('plans', id);
+    draft = plan ? ed.begin(plan.id, structuredClone(plan)) : null;
+    if (ed.restored) setTimeout(() => toast('Restored your unsaved changes', 3500));
   },
 
   render() {
     if (!draft) return `${backLink('#/plans', 'Plans')}<p>Plan not found.</p>`;
+    ed.persist();
     const d = draft;
     return `
       ${backLink('#/plans', 'Plans')}
@@ -145,7 +150,24 @@ export const editView = {
   onInput(el, type) {
     const v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? num(el.value) : el.value;
     setPath(draft, el.dataset.bind, v);
+    ed.persist();
     return type === 'change' && (el.tagName === 'SELECT' || el.type === 'checkbox');
+  },
+
+  // Used by the "unsaved changes" prompt when leaving this screen.
+  isDirty: () => ed.dirty(),
+  discard: () => ed.discard(),
+  commit() {
+    if (!draft.name.trim()) { toast('Give the plan a name'); return false; }
+    draft.name = draft.name.trim();
+    draft.ramp = draft.ramp.filter((r) => r.week > 0 && r.pct > 0);
+    // Store a copy, so later edits on this screen don't change the saved plan until saved again.
+    const saved = upsert('plans', structuredClone(draft));
+    draft.id = saved.id;
+    draft.updatedAt = saved.updatedAt;
+    ed.saved(saved.id);
+    toast('Plan saved');
+    return true;
   },
 
   actions: {
@@ -189,12 +211,7 @@ export const editView = {
     },
 
     savePlan() {
-      if (!draft.name.trim()) return toast('Give the plan a name');
-      draft.name = draft.name.trim();
-      draft.ramp = draft.ramp.filter((r) => r.week > 0 && r.pct > 0);
-      upsert('plans', draft);
-      toast('Plan saved');
-      location.hash = '#/plans';
+      if (editView.commit()) location.hash = '#/plans';
     },
     async sharePlan() {
       const people = sync.isConnected() ? sync.household() : [];
@@ -204,7 +221,8 @@ export const editView = {
           : 'Connect Google Drive in Settings to share plans', 4000);
         return;
       }
-      // Share what's saved, so unsaved edits on this screen aren't sent by surprise.
+      // Share exactly what's on screen: save any changes first.
+      if (ed.dirty() && !editView.commit()) return;
       const saved = get('plans', draft.id);
       const { value, form } = await sheet({
         title: `Share “${saved.name}”`,
@@ -225,6 +243,7 @@ export const editView = {
     },
 
     duplicatePlan() {
+      if (ed.dirty() && !editView.commit()) return; // save changes first, so both match
       const copy = structuredClone(draft);
       copy.id = null;
       copy.name = `${draft.name} (copy)`;
@@ -237,6 +256,7 @@ export const editView = {
     async deletePlan() {
       if (!(await confirmSheet('Delete plan?', `"${draft.name}" will be removed. Past workouts stay in your history.`, 'Delete', true))) return;
       remove('plans', draft.id);
+      ed.discard();
       location.hash = '#/plans';
     },
   },
@@ -244,9 +264,10 @@ export const editView = {
 
 function itemEditor(it, i, count) {
   const ex = exerciseOf(it.exerciseId);
-  const n = (bind, label, val, attrs = '') => `
+  // `decimal` shows the keypad with a decimal point (iOS uses the first inputmode it sees).
+  const n = (bind, label, val, { min = 0, decimal = false } = {}) => `
     <label class="field"><span>${label}</span>
-      <input type="number" inputmode="numeric" min="0" ${attrs} data-bind="items.${i}.${bind}" value="${val || 0}"></label>`;
+      <input type="number" inputmode="${decimal ? 'decimal' : 'numeric'}" min="${min}" step="${decimal ? 'any' : '1'}" data-bind="items.${i}.${bind}" value="${val || 0}"></label>`;
   return `
     <section class="card form item-edit">
       <div class="card-head">
@@ -258,10 +279,10 @@ function itemEditor(it, i, count) {
         </div>
       </div>
       <div class="field-grid">
-        ${n('sets', 'Sets', it.sets, 'min="1"')}
+        ${n('sets', 'Sets', it.sets, { min: 1 })}
         ${ex.track.reps ? n('reps', ex.perSide ? 'Reps / side' : 'Reps', it.reps) : ''}
         ${timerOn(it) || ex.track.duration ? n('duration', 'Seconds', it.duration) : ''}
-        ${ex.track.weight ? n('weight', 'Weight', it.weight, 'inputmode="decimal" step="any"') : ''}
+        ${ex.track.weight ? n('weight', `Weight (${unit()})`, it.weight, { decimal: true }) : ''}
         ${n('rest', 'Rest (s)', it.rest)}
       </div>
       <label class="field inline"><span>Timer${timerOn(it) && !it.duration ? ' <span class="muted">(0 seconds = stopwatch)</span>' : ''}</span>
