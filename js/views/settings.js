@@ -55,7 +55,7 @@ function voiceFields(st) {
         </select></label>
     </div>
     ${all.length ? '' : '<p class="small muted">Loading voices…</p>'}
-    <p class="small muted">Want a more natural voice? On iPhone: Settings → Accessibility → Spoken Content → Voices, download an "Enhanced" or "Premium" voice, then reopen FitTrack. (Siri's own voices aren't available to web apps.)</p>`;
+    <p class="small muted">Want a more natural voice? On iPhone: Settings → Accessibility → Read &amp; Speak → Voices → English (older iOS: Spoken Content), download an "Enhanced" or "Premium" voice, then fully close and reopen FitTrack. Tip: search Settings for "Voices". (Siri's own voices aren't available to web apps.)</p>`;
 }
 
 export function render() {
