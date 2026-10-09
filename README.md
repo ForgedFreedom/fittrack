@@ -12,6 +12,8 @@ Each person has their own **profile** on their own phone, with separate plans an
 - **Workouts**: one tap logs a set at the target, or use "Custom…" to log the real numbers.
   Every exercise can use a timer (countdown, or a stopwatch at 0 seconds). The rest countdown can
   auto-start the next timed set after a short "Get ready". Tap a logged set to fix it.
+  Spoken cues (phone's built-in voice) announce rest, what's next, "Get ready" and "Go";
+  turn off under Settings → Workout timers.
 - **Single exercises**: log any exercise without a plan (Today → Exercise, or "Log it now" on an exercise).
 - **Walks & runs**: log type, distance and time by hand; shows pace and weekly distance.
 - **Body weight**: log entries, trend chart with a 7-day average, and an optional goal. Private to you.

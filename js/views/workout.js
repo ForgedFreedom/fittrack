@@ -1,6 +1,6 @@
 import { get, getState, upsert, remove, sessionProgress, sessionComplete, itemDone, rampPct, planWeek, timerOn, addAdhocExercise } from '../store.js';
 import { esc, now, prettyDate, dateKey, num, fmtDuration } from '../util.js';
-import { icons, sheet, timer, toast, confirmSheet, unlockAudio } from '../ui.js';
+import { icons, sheet, timer, toast, confirmSheet, unlockAudio, speak } from '../ui.js';
 import { exerciseOf, targetText, setText, progressBar, backLink, unit } from './common.js';
 import { syncNow } from '../sync.js';
 import { exerciseOptions } from './plans.js';
@@ -110,16 +110,40 @@ function save(s) {
 const setLabel = (it, ex) =>
   `Set ${it.sets.length + 1} of ${it.target.sets || 1}${ex.perSide ? ' · each side' : ''}${ex.track.reps && it.target.reps ? ` · ${it.target.reps} reps` : ''}`;
 
+// ---- spoken cues (Settings → Workout timers → Read exercises aloud) ----
+
+const say = (text) => { if (getState().settings.voice !== false) speak(text); };
+
+const spokenTime = (sec) => {
+  const m = Math.floor(sec / 60), s = sec % 60;
+  const part = (n, word) => (n ? `${n} ${word}${n === 1 ? '' : 's'}` : '');
+  return [part(m, 'minute'), part(s, 'second')].filter(Boolean).join(' ');
+};
+
+// e.g. "Bodyweight squats, set 2 of 4, 13 reps, each side, 15 pounds"
+function spokenSet(it) {
+  const ex = exOf(it);
+  const t = it.target;
+  const parts = [ex.name, `set ${it.sets.length + 1} of ${t.sets || 1}`];
+  if (ex.track.reps && t.reps) parts.push(`${t.reps} reps`);
+  else if (t.duration && (ex.track.duration || timerOn(it))) parts.push(spokenTime(t.duration));
+  if (ex.perSide) parts.push('each side');
+  if (ex.track.weight && t.weight) parts.push(`${t.weight} ${unit() === 'kg' ? 'kilograms' : 'pounds'}`);
+  return parts.join(', ');
+}
+
 // Run the on-screen timer for item i: countdown if it has seconds, otherwise a stopwatch.
 function runSet(i) {
   const it = session().items[i];
   const ex = exOf(it);
   const secs = it.target.duration || 0;
+  say('Go');
   timer({
     title: ex.name,
     subtitle: setLabel(it, ex),
     seconds: secs,
     mode: secs ? 'down' : 'up',
+    cues: secs >= 20 ? { 10: () => say('10 seconds') } : {},
     onDone: (elapsed) => logSet(i, { ...setValues(it, ex), duration: elapsed }),
   });
 }
@@ -141,21 +165,28 @@ function logSet(i, set) {
 
   if (sessionComplete(s)) {
     toast('Workout complete! 🎉');
+    say('Workout complete. Nice work!');
     return;
   }
   const next = nextIndex(s, i);
   const nextIt = next >= 0 ? s.items[next] : null;
   const auto = getState().settings.autoStart !== false && nextIt && timerOn(nextIt);
 
-  const afterRest = () => (auto ? getReady(next) : scrollTo(next));
+  const afterRest = () => {
+    if (auto) return getReady(next);
+    if (nextIt) say(`Next: ${spokenSet(nextIt)}`);
+    scrollTo(next);
+  };
   const rest = it.target.rest;
   if (rest > 0) {
+    say(`Rest, ${spokenTime(rest)}.${nextIt ? ` Next: ${spokenSet(nextIt)}.` : ''}`);
     timer({
       title: 'Rest',
       subtitle: nextIt ? `Next: ${exOf(nextIt).name}${auto ? ' (starts automatically)' : ''}` : '',
       seconds: rest,
       mode: 'rest',
       stopLabel: auto ? "Don't auto-start" : '',
+      cues: rest >= 10 ? { 5: () => say('5 seconds') } : {},
       onDone: afterRest,
       onCancel: () => scrollTo(next),
     });
@@ -171,6 +202,7 @@ function getReady(i) {
   const it = session().items[i];
   const ex = exOf(it);
   scrollTo(i);
+  say(`Get ready: ${ex.name}`);
   timer({
     title: 'Get ready',
     subtitle: `${ex.name} · ${setLabel(it, ex)}`,
@@ -256,6 +288,7 @@ export const actions = {
   },
 
   timedSet({ el }) {
+    unlockAudio(); // lets iOS play the beeps and the spoken "Go"
     runSet(+el.dataset.i);
   },
 

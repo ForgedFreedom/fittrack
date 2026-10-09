@@ -1,7 +1,7 @@
 import { getState, updateSettings, mergeStates, replaceState } from '../store.js';
 import { current as currentProfile, rename } from '../profiles.js';
 import { esc, dateKey, num } from '../util.js';
-import { icons, toast, confirmSheet } from '../ui.js';
+import { icons, toast, confirmSheet, speak, unlockAudio } from '../ui.js';
 import * as sync from '../sync.js';
 
 let syncError = '';
@@ -61,6 +61,10 @@ export function render() {
         <span class="switch"><input type="checkbox" data-setting="autoStart" ${st.autoStart !== false ? "checked" : ""}><span></span></span></label>
       <label class="field"><span>Get-ready seconds before an auto-start</span>
         <input type="number" inputmode="numeric" min="0" max="30" step="1" data-setting="grace" value="${st.grace ?? 2}"></label>
+      <label class="field inline"><span>Read exercises aloud</span>
+        <span class="switch"><input type="checkbox" data-setting="voice" ${st.voice !== false ? "checked" : ""}><span></span></span></label>
+      <button class="btn small" data-act="testVoice">${icons.sound} Test voice</button>
+      <p class="small muted">Announces rest, what's next, "Get ready" and "Go", using your phone's built-in voice. Turn the volume up. On iPhone, speech may be silent while the Ring/Silent switch is set to silent.</p>
       <p class="small muted">When on, the next timed set starts by itself after the rest countdown, with a short "Get ready" countdown first. When off, you tap Start for each set. You can stop the auto-start on the rest screen anytime.</p>
     </section>
 
@@ -131,6 +135,11 @@ export const actions = {
   disconnect() {
     sync.disconnect();
     toast('Disconnected. Data stays on this phone.');
+  },
+  testVoice() {
+    unlockAudio();
+    speak('Rest, 45 seconds. Next: Bodyweight squats, set 2 of 4, 13 reps.');
+    return false;
   },
   exportData() {
     const blob = new Blob([JSON.stringify(getState(), null, 2)], { type: 'application/json' });

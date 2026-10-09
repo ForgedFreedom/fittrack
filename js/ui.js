@@ -72,6 +72,27 @@ export function unlockAudio() {
     audioCtx ??= new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
   } catch { /* no audio */ }
+  // iOS also only lets a page talk after it has spoken once from a tap.
+  if (!speechPrimed && window.speechSynthesis) {
+    speechPrimed = true;
+    try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch { /* no speech */ }
+  }
+}
+
+// ---- spoken cues ----------------------------------------------------------------------
+
+let speechPrimed = false;
+
+// Speak a short phrase with the phone's built-in voice, cutting off anything still talking.
+export function speak(text) {
+  if (!text || !window.speechSynthesis) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = navigator.language || 'en-US';
+    u.rate = 1.05;
+    speechSynthesis.speak(u);
+  } catch { /* no speech */ }
 }
 
 export function beep(times = 1) {
@@ -111,7 +132,9 @@ async function keepAwake(on) {
 
 const BEEPS = { down: 3, rest: 2, ready: 1 };
 
-export function timer({ title, subtitle = '', seconds = 0, mode = 'down', stopLabel, onDone, onCancel }) {
+// `cues`: { secondsLeft: fn } runs once when a countdown reaches that many seconds left.
+export function timer({ title, subtitle = '', seconds = 0, mode = 'down', stopLabel, cues = {}, onDone, onCancel }) {
+  const fired = new Set();
   unlockAudio();
   keepAwake(true);
   timerOpen = true;
@@ -159,8 +182,11 @@ export function timer({ title, subtitle = '', seconds = 0, mode = 'down', stopLa
       clock.textContent = fmtClock(Math.floor(elapsed()));
     } else {
       const left = Math.max(0, total - elapsed());
-      clock.textContent = fmtClock(Math.ceil(left));
+      const whole = Math.ceil(left);
+      clock.textContent = fmtClock(whole);
       if (left <= 0) { beep(BEEPS[mode]); return finish(false); }
+      // Only cue on the way down (not right at the start of a short countdown).
+      if (cues[whole] && !fired.has(whole) && whole < total) { fired.add(whole); cues[whole](); }
     }
     raf = requestAnimationFrame(tick);
   };
@@ -200,6 +226,7 @@ export const icons = {
   trash: svg('<path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/>'),
   back: svg('<path d="M15 6l-6 6 6 6"/>'),
   sync: svg('<path d="M20 12a8 8 0 0 1-14 5.3M4 12a8 8 0 0 1 14-5.3"/><path d="M18 3v4h-4M6 21v-4h4"/>'),
+  sound: svg('<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>'),
   share: svg('<path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/>'),
   walk: svg('<circle cx="13" cy="4" r="2"/><path d="M9 21l3-7 3 3v5M7 12l3-4 4 1 3 4M12 14l-1-5"/>'),
   scale: svg('<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 9a4 4 0 0 1 8 0zM12 9l1.5-2"/>'),
