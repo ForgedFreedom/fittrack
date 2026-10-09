@@ -112,7 +112,10 @@ const setLabel = (it, ex) =>
 
 // ---- spoken cues (Settings → Workout timers → Read exercises aloud) ----
 
-const say = (text) => { if (getState().settings.voice !== false) speak(text); };
+const say = (text) => {
+  const st = getState().settings;
+  if (st.voice !== false) speak(text, st);
+};
 
 const spokenTime = (sec) => {
   const m = Math.floor(sec / 60), s = sec % 60;

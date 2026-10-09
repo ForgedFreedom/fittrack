@@ -83,14 +83,19 @@ export function unlockAudio() {
 
 let speechPrimed = false;
 
-// Speak a short phrase with the phone's built-in voice, cutting off anything still talking.
-export function speak(text) {
+// Voices installed on this device (the list can arrive a moment after the app starts).
+export const voices = () => window.speechSynthesis?.getVoices() || [];
+
+// Speak a short phrase, cutting off anything still talking.
+// `prefs` is the settings object: voiceName (blank = phone default) and voiceRate.
+export function speak(text, prefs = {}) {
   if (!text || !window.speechSynthesis) return;
   try {
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = navigator.language || 'en-US';
-    u.rate = 1.05;
+    const v = prefs.voiceName && voices().find((x) => x.name === prefs.voiceName);
+    if (v) { u.voice = v; u.lang = v.lang; } else u.lang = navigator.language || 'en-US';
+    u.rate = prefs.voiceRate || 1.05;
     speechSynthesis.speak(u);
   } catch { /* no speech */ }
 }

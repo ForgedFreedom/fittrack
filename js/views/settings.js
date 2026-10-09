@@ -1,7 +1,7 @@
 import { getState, updateSettings, mergeStates, replaceState } from '../store.js';
 import { current as currentProfile, rename } from '../profiles.js';
 import { esc, dateKey, num } from '../util.js';
-import { icons, toast, confirmSheet, speak, unlockAudio } from '../ui.js';
+import { icons, toast, confirmSheet, speak, unlockAudio, voices } from '../ui.js';
 import * as sync from '../sync.js';
 
 let syncError = '';
@@ -26,6 +26,36 @@ function syncCard() {
         ${connected ? `<button class="btn" data-act="disconnect">Disconnect</button>` : ''}
       </div>
     </section>`;
+}
+
+const SAMPLE = 'Rest, 45 seconds. Next: Bodyweight squats, set 2 of 4, 13 reps.';
+const RATES = [[0.85, 'Slower'], [1.05, 'Normal'], [1.25, 'Faster']];
+
+// Voice picker: this phone's installed voices, your language first.
+function voiceFields(st) {
+  const all = voices();
+  const lang = (navigator.language || 'en').slice(0, 2).toLowerCase();
+  const opt = (v) => `<option value="${esc(v.name)}" ${v.name === st.voiceName ? 'selected' : ''}>${esc(v.name)} (${esc(v.lang)})</option>`;
+  const mine = all.filter((v) => v.lang.toLowerCase().startsWith(lang)).sort((a, b) => a.name.localeCompare(b.name));
+  const other = all.filter((v) => !mine.includes(v)).sort((a, b) => a.lang.localeCompare(b.lang) || a.name.localeCompare(b.name));
+  const missing = st.voiceName && !all.some((v) => v.name === st.voiceName);
+  const rate = st.voiceRate || 1.05;
+  return `
+    <div class="field-grid">
+      <label class="field"><span>Voice</span>
+        <select data-setting="voiceName">
+          <option value="">Phone default</option>
+          ${missing ? `<option value="${esc(st.voiceName)}" selected>${esc(st.voiceName)} (not on this phone)</option>` : ''}
+          ${mine.length ? `<optgroup label="Your language">${mine.map(opt).join('')}</optgroup>` : ''}
+          ${other.length ? `<optgroup label="Other languages">${other.map(opt).join('')}</optgroup>` : ''}
+        </select></label>
+      <label class="field"><span>Speed</span>
+        <select data-setting="voiceRate">
+          ${RATES.map(([r, label]) => `<option value="${r}" ${Math.abs(r - rate) < 0.01 ? 'selected' : ''}>${label}</option>`).join('')}
+        </select></label>
+    </div>
+    ${all.length ? '' : '<p class="small muted">Loading voices…</p>'}
+    <p class="small muted">Want a more natural voice? On iPhone: Settings → Accessibility → Spoken Content → Voices, download an "Enhanced" or "Premium" voice, then reopen FitTrack. (Siri's own voices aren't available to web apps.)</p>`;
 }
 
 export function render() {
@@ -63,6 +93,7 @@ export function render() {
         <input type="number" inputmode="numeric" min="0" max="30" step="1" data-setting="grace" value="${st.grace ?? 2}"></label>
       <label class="field inline"><span>Read exercises aloud</span>
         <span class="switch"><input type="checkbox" data-setting="voice" ${st.voice !== false ? "checked" : ""}><span></span></span></label>
+      ${voiceFields(st)}
       <button class="btn small" data-act="testVoice">${icons.sound} Test voice</button>
       <p class="small muted">Announces rest, what's next, "Get ready" and "Go", using your phone's built-in voice. Turn the volume up. On iPhone, speech may be silent while the Ring/Silent switch is set to silent.</p>
       <p class="small muted">When on, the next timed set starts by itself after the rest countdown, with a short "Get ready" countdown first. When off, you tap Start for each set. You can stop the auto-start on the rest screen anytime.</p>
@@ -100,8 +131,11 @@ export function onSetting(el) {
   }
   const value = el.type === "checkbox" ? el.checked
     : el.type === "number" ? Math.max(0, Math.round(num(el.value)))
+    : key === 'voiceRate' ? num(el.value)
     : el.value.trim();
   updateSettings({ [key]: value });
+  // Hear the new voice or speed right away.
+  if (key === 'voiceName' || key === 'voiceRate') { unlockAudio(); speak(SAMPLE, getState().settings); }
   if (key === 'name' && value) rename(currentProfile().id, value);
   return false;
 }
@@ -138,7 +172,7 @@ export const actions = {
   },
   testVoice() {
     unlockAudio();
-    speak('Rest, 45 seconds. Next: Bodyweight squats, set 2 of 4, 13 reps.');
+    speak(SAMPLE, getState().settings);
     return false;
   },
   exportData() {
