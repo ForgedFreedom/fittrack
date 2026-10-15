@@ -30,6 +30,12 @@ export class Draft {
     return this.value;
   }
 
+  // For records that are complete as soon as they're created (e.g. a new run program):
+  // count as unsaved until saved, even with no edits.
+  markUnsaved() {
+    this.base = '';
+  }
+
   dirty() {
     return !!this.value && JSON.stringify(this.value) !== this.base;
   }

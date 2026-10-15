@@ -1,10 +1,19 @@
 import { list, get, upsert, remove, timerOn } from '../store.js';
-import { esc, uid, dateKey, DAY_NAMES, num } from '../util.js';
+import { esc, uid, dateKey, DAY_NAMES, num, prettyDate } from '../util.js';
 import { icons, sheet, toast, confirmSheet } from '../ui.js';
 import { scheduleText, backLink, exerciseOf, targetText, emptyState, unit } from './common.js';
 import { Draft } from '../drafts.js';
 import * as sync from '../sync.js';
 import { buildShare } from '../share.js';
+import { programStatus } from './runplan.js';
+
+function runSubtitle(p) {
+  const st = programStatus(p);
+  const len = p.program.length;
+  if (st.state === 'before') return `Run program · starts ${prettyDate(p.startDate)}`;
+  if (st.state === 'finished') return `Run program · finished (${len} days)`;
+  return `Run program · day ${st.n} of ${len}`;
+}
 
 // ---- shared ---------------------------------------------------------------------
 
@@ -48,14 +57,14 @@ export const listView = {
     return `
       <header class="page-head row-between">
         <h1>Plans</h1>
-        <a class="btn primary small" href="#/plan/new">${icons.plus} New plan</a>
+        <button class="btn primary small" data-act="newPlanChoice">${icons.plus} New plan</button>
       </header>
       <p class="muted small">Turn on as many plans as you like. Active plans show up on Today on their scheduled days.</p>
       ${plans.length ? plans.map((p) => `
         <section class="card plan-row ${p.active ? '' : 'inactive'}">
-          <a class="plan-link" href="#/plan/${p.id}">
-            <h3>${esc(p.name)}</h3>
-            <p class="muted small">${esc(scheduleText(p))} · ${p.items.length} exercises</p>
+          <a class="plan-link" href="#/${p.kind === 'run' ? 'run-plan' : 'plan'}/${p.id}">
+            <h3>${p.kind === 'run' ? `<span class="tag">Run</span> ` : ''}${esc(p.name)}</h3>
+            <p class="muted small">${esc(p.kind === 'run' ? runSubtitle(p) : `${scheduleText(p)} · ${p.items.length} exercises`)}</p>
           </a>
           <label class="switch" aria-label="Active">
             <input type="checkbox" data-act="togglePlanActive" data-plan="${p.id}" ${p.active ? 'checked' : ''}>
@@ -65,6 +74,19 @@ export const listView = {
     `;
   },
   actions: {
+    async newPlanChoice() {
+      const { value } = await sheet({
+        title: 'New plan',
+        body: '<p class="small">An <b>exercise plan</b> is a set of exercises on chosen days. A <b>run program</b> builds you up to a target pace (like an 8:00 mile) with guided run/walk intervals.</p>',
+        buttons: [
+          { label: 'Exercise plan', value: 'plan', cls: 'primary' },
+          { label: 'Run program (target pace)', value: 'run', cls: 'primary' },
+          { label: 'Cancel', value: null },
+        ],
+      });
+      if (value === 'plan') location.hash = '#/plan/new';
+      if (value === 'run') location.hash = '#/run-plan/new';
+    },
     togglePlanActive({ el }) {
       const p = get('plans', el.dataset.plan);
       p.active = el.checked;

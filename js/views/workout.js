@@ -4,6 +4,7 @@ import { icons, sheet, timer, toast, confirmSheet, unlockAudio, speak } from '..
 import { exerciseOf, targetText, setText, progressBar, backLink, unit } from './common.js';
 import { syncNow } from '../sync.js';
 import { exerciseOptions } from './plans.js';
+import { renderRunSession } from './runplan.js';
 
 let sessionId = null;
 const session = () => get('sessions', sessionId);
@@ -59,6 +60,7 @@ export function enter({ id }) { sessionId = id; }
 export function render() {
   const s = session();
   if (!s) return `${backLink('#/today', 'Today')}<p>Workout not found.</p>`;
+  if (s.run) return renderRunSession(s); // run program day
   const plan = get('plans', s.planId);
   const frac = sessionProgress(s);
   const complete = sessionComplete(s);

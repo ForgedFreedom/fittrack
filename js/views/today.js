@@ -8,8 +8,35 @@ import { summary } from '../stats.js';
 import { progressBar, scheduleText, streaks, emptyState } from './common.js';
 import { exerciseOptions } from './plans.js';
 import { activitySheet, weightSheet, activityText } from './logsheets.js';
+import { programStatus, bestMile } from './runplan.js';
+import { describeDay, dayAt, dateOfDay, nextWorkoutDay, paceText, segmentsFor, totalSecs } from '../run.js';
+
+// Run programs on a rest day, before they start, or once finished.
+function runInfoCard(plan, today) {
+  const st = programStatus(plan, today);
+  const len = plan.program.length;
+  let body;
+  if (st.state === 'rest') {
+    const next = nextWorkoutDay(plan, st.n);
+    body = `<p class="muted small">Rest day · day ${st.n} of ${len}</p>
+      ${next ? `<p class="small">Next: ${esc(describeDay(dayAt(plan, next)))}, ${esc(prettyDate(dateOfDay(plan, next)))}</p>` : ''}`;
+  } else if (st.state === 'before') {
+    body = `<p class="muted small">Starts ${esc(prettyDate(plan.startDate))} · day 1: ${esc(describeDay(dayAt(plan, 1)))}</p>`;
+  } else {
+    const best = bestMile(plan);
+    body = `<p class="small">🎉 Program finished${best ? ` · best mile <b>${paceText(best)}</b> (goal ${paceText(plan.pace)})` : ''}</p>
+      <p class="muted small">Edit it to set a new start date or a faster target.</p>`;
+  }
+  return `
+    <section class="card plan-card">
+      <div class="card-head"><h3><span class="tag">Run</span> ${esc(plan.name)}</h3></div>
+      ${body}
+      <a class="btn" href="#/run-plan/${plan.id}">View program</a>
+    </section>`;
+}
 
 function planCard(plan, today, scheduled) {
+  if (plan.kind === 'run') return runCard(plan, today);
   const s = sessionFor(plan.id, today);
   const frac = s ? sessionProgress(s) : 0;
   const done = s && sessionComplete(s);
@@ -71,12 +98,29 @@ function householdSection() {
     </div>`;
 }
 
+function runCard(plan, today) {
+  const s = sessionFor(plan.id, today);
+  const done = s && sessionComplete(s);
+  const st = programStatus(plan, today);
+  const mins = Math.round(totalSecs(segmentsFor(plan, st.day)) / 60);
+  return `
+    <section class="card plan-card ${done ? 'done' : ''}">
+      <div class="card-head">
+        <h3><span class="tag">Run</span> ${esc(plan.name)}</h3>
+        <span class="muted small">Day ${st.n} of ${plan.program.length}</span>
+      </div>
+      <p class="small">${esc(describeDay(st.day))} <span class="muted">· about ${mins} min</span></p>
+      <button class="btn ${done ? '' : 'primary'}" data-act="openPlanToday" data-plan="${plan.id}">${done ? `${icons.check} Done. View` : `${icons.play} Start`}</button>
+    </section>`;
+}
+
 export function render() {
   const today = dateKey();
   const name = getState().settings.name;
   const active = list('plans').filter((p) => p.active);
   const due = active.filter((p) => isScheduled(p, today));
-  const other = active.filter((p) => !isScheduled(p, today));
+  const other = active.filter((p) => !isScheduled(p, today) && p.kind !== 'run');
+  const runInfo = active.filter((p) => p.kind === 'run' && !isScheduled(p, today));
   const adhoc = adhocFor(today);
   const acts = list('activities').filter((a) => a.date === today);
   const { current, best } = streaks();
@@ -121,8 +165,9 @@ export function render() {
     ${due.length
       ? due.map((p) => planCard(p, today, true)).join('')
       : active.length
-        ? emptyState('No plans scheduled today. Enjoy the rest day, or pick one below.')
+        ? emptyState(other.length ? 'No plans scheduled today. Enjoy the rest day, or pick one below.' : 'Nothing scheduled today. Enjoy the rest day.')
         : emptyState('No active plans yet.', `<a class="btn primary" href="#/plans">Choose a plan</a>`)}
+    ${runInfo.map((p) => runInfoCard(p, today)).join('')}
 
     ${adhoc?.items.length ? `
       <section class="card">

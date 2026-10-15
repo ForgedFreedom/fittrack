@@ -356,3 +356,39 @@ body.no-tabs .tabbar { display: none; }
 .share-card { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
 .share-card p:first-child { display: flex; align-items: center; gap: 6px; margin-top: 0; }
 .share-card svg { width: 18px; height: 18px; color: var(--accent); }
+
+/* ---- run programs ------------------------------------------------------------------------ */
+.paces { display: grid; gap: 4px; margin: 4px 0; }
+.pace-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: baseline; font-variant-numeric: tabular-nums; }
+.pace-row b { font-size: 18px; }
+.run-days { display: flex; flex-direction: column; gap: 10px; }
+.run-day { border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+.run-day.rest select { color: var(--muted); }
+.run-day-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.run-day-head .ok svg { width: 16px; height: 16px; vertical-align: -3px; }
+.run-day-fields { display: flex; gap: 8px; align-items: center; }
+.run-day-fields select { flex: 1; min-width: 0; }
+.mini-field { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--text-2); }
+.mini-field input { width: 64px; padding: 8px; }
+.segs { display: flex; flex-direction: column; gap: 8px; }
+.seg-row { display: grid; grid-template-columns: 52px 1fr; gap: 8px; font-size: 15px; line-height: 1.4; }
+.seg-row > b:first-child { color: var(--accent); font-variant-numeric: tabular-nums; }
+.done-card .ok svg { width: 18px; height: 18px; vertical-align: -3px; }
+
+/* guided intervals (full screen) */
+.run-timer {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; padding: calc(env(safe-area-inset-top) + 16px) 20px calc(env(safe-area-inset-bottom) + 16px);
+  background: var(--bg); text-align: center;
+}
+.run-timer.kind-run, .run-timer.kind-trial { background: var(--accent-soft); }
+.run-timer.kind-sprint { background: color-mix(in srgb, var(--danger) 18%, var(--bg)); }
+.rt-top { position: absolute; top: calc(env(safe-area-inset-top) + 14px); left: 20px; right: 20px; display: flex; justify-content: space-between; gap: 12px; font-size: 14px; color: var(--text-2); }
+.rt-label { font-size: 30px; font-weight: 800; letter-spacing: 0.06em; }
+.rt-speed { font-size: 64px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.rt-speed small { font-size: 22px; font-weight: 600; color: var(--text-2); }
+.rt-pace { color: var(--text-2); min-height: 1.4em; }
+.rt-clock { font-size: 80px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; margin: 8px 0; }
+.rt-next { color: var(--text-2); font-size: 15px; min-height: 1.4em; }
+.rt-bar { width: 100%; max-width: 360px; margin: 10px 0 14px; }
+.run-timer .timer-buttons { width: 100%; max-width: 360px; }

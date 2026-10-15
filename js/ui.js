@@ -120,7 +120,7 @@ export function beep(times = 1) {
 // ---- wake lock: keep the screen on during timers -----------------------------------
 
 let wakeLock, timerOpen = false;
-async function keepAwake(on) {
+export async function keepAwake(on) {
   try {
     if (on && !wakeLock && navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen');
     if (!on && wakeLock) { const w = wakeLock; wakeLock = null; await w.release(); }

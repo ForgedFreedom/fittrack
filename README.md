@@ -14,6 +14,10 @@ Each person has their own **profile** on their own phone, with separate plans an
   auto-start the next timed set after a short "Get ready". Tap a logged set to fix it.
   Spoken cues (phone's built-in voice) announce rest, what's next, "Get ready" and "Go";
   turn off under Settings → Workout timers.
+- **Run programs**: enter a target pace (e.g. 8:00/mile) and get an 18-day build-up: run/walk 60/120,
+  30/60 sprints, speed work (6:30 pace for an 8:00 target, scaled for other targets), tempo runs and a
+  1-mile time trial. Each day runs as a guided interval timer with treadmill speed (mph), pace and spoken
+  cues; afterwards the run is logged to Walks & runs. Every day can be edited.
 - **Single exercises**: log any exercise without a plan (Today → Exercise, or "Log it now" on an exercise).
 - **Walks & runs**: log type, distance and time by hand; shows pace and weekly distance.
 - **Body weight**: log entries, trend chart with a 7-day average, and an optional goal. Private to you.
@@ -97,6 +101,9 @@ js/app.js              router, events, background sync
 js/profiles.js         profiles on this phone, legacy data migration
 js/stats.js            streaks, weekly numbers, household summary
 js/share.js            sending/receiving plan copies between profiles
+js/run.js              run programs: paces, treadmill speeds, the 18-day template, segments
+js/intervals.js        full-screen guided intervals for run programs
+js/drafts.js           unsaved-changes tracking for the editors
 js/store.js            data model, schedule/ramp logic, merge
 js/seed.js             starter exercises and plans
 js/sync.js             Google Drive sync

@@ -11,12 +11,14 @@ import * as exercises from './views/exercises.js';
 import * as progress from './views/progress.js';
 import * as settings from './views/settings.js';
 import * as profile from './views/profile.js';
+import * as runplan from './views/runplan.js';
 
 const routes = [
   { re: /^#\/today$/, view: today, tab: 'today' },
   { re: /^#\/workout\/([\w-]+)$/, view: workout, tab: 'today', keys: ['id'] },
   { re: /^#\/plans$/, view: plans.listView, tab: 'plans' },
   { re: /^#\/plan\/([\w-]+)$/, view: plans.editView, tab: 'plans', keys: ['id'] },
+  { re: /^#\/run-plan\/([\w-]+)$/, view: runplan.editView, tab: 'plans', keys: ['id'] },
   { re: /^#\/exercises$/, view: exercises.listView, tab: 'exercises' },
   { re: /^#\/exercise\/([\w-]+)$/, view: exercises.editView, tab: 'exercises', keys: ['id'] },
   { re: /^#\/progress$/, view: progress, tab: 'progress' },
@@ -32,7 +34,8 @@ const TABS = [
 // Names must be unique across screens; a clash would silently run the wrong action.
 const ACTIONS = {};
 for (const group of [today.actions, workout.actions, plans.listView.actions, plans.editView.actions,
-  exercises.editView.actions, progress.actions, settings.actions, profile.actions]) {
+  exercises.editView.actions, progress.actions, settings.actions, profile.actions,
+  runplan.editView.actions, runplan.runActions]) {
   for (const [name, fn] of Object.entries(group)) {
     if (ACTIONS[name]) console.error(`Duplicate action name: ${name}`);
     ACTIONS[name] = fn;

@@ -4,6 +4,7 @@
 
 import { uid, now, dateKey, parseDateKey, daysBetween } from './util.js';
 import { seedData, SEED_TIME } from './seed.js';
+import { dayNumber, dayAt } from './run.js';
 
 // Each profile (person) has its own blob: fittrack:data:v1:<profileId>.
 const keyFor = (profileId) => `fittrack:data:v1:${profileId}`;
@@ -127,6 +128,11 @@ export function mergeStates(local, remote) {
 // plan.days: array of weekday numbers (0=Sun). Empty = every day.
 export function isScheduled(plan, key = dateKey()) {
   if (!plan.active) return false;
+  // Run programs: a workout is due on each non-rest day of the program.
+  if (plan.kind === 'run') {
+    const day = dayAt(plan, dayNumber(plan, key));
+    return !!day && day.type !== 'rest';
+  }
   if (plan.startDate && key < plan.startDate) return false;
   if (!plan.days?.length) return true;
   return plan.days.includes(parseDateKey(key).getDay());
@@ -201,6 +207,15 @@ function buildItems(plan, key, existing = []) {
 export function startSession(planId, key = dateKey()) {
   const plan = get('plans', planId);
   const existing = sessionFor(planId, key);
+  if (plan.kind === 'run') {
+    if (!existing) return upsert('sessions', { planId, date: key, startedAt: now(), items: [], run: { day: dayNumber(plan, key), done: false } });
+    // Not done yet: follow the program in case its start date was changed.
+    if (!existing.run.done && dayNumber(plan, key) && existing.run.day !== dayNumber(plan, key)) {
+      existing.run = { ...existing.run, day: dayNumber(plan, key) };
+      return upsert('sessions', existing);
+    }
+    return existing;
+  }
   if (existing) {
     // Refresh targets in case the plan was edited.
     existing.items = buildItems(plan, key, existing.items);
@@ -219,6 +234,7 @@ export function itemDone(it) {
 }
 
 export function sessionProgress(s) {
+  if (s.run) return s.run.done ? 1 : 0;
   let need = 0, got = 0;
   for (const it of s.items) {
     const t = it.target.sets || 1;
@@ -228,7 +244,8 @@ export function sessionProgress(s) {
   return need ? got / need : 0;
 }
 
-export const sessionComplete = (s) => s.items.length > 0 && s.items.every(itemDone);
+export const sessionComplete = (s) =>
+  s.run ? !!s.run.done : s.items.length > 0 && s.items.every(itemDone);
 
 // ---- single exercises (no plan) ----------------------------------------------------
 // One "single exercises" session per day; exercises are added to it as you go.
