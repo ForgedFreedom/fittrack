@@ -1,16 +1,23 @@
 // Run programs: the program editor (#/run-plan/<id>) and the day's run screen
 // (shown by the workout route when a session belongs to a run program).
 
-import { get, getState, list, upsert, remove, sessionFor } from '../store.js';
-import { esc, dateKey, num, prettyDate } from '../util.js';
+import { get, getState, list, upsert, remove, startSession } from '../store.js';
+import { esc, dateKey, num, prettyDate, addDays } from '../util.js';
 import { icons, sheet, toast, confirmSheet, speak, unlockAudio } from '../ui.js';
 import { backLink } from './common.js';
 import { Draft } from '../drafts.js';
 import { runIntervals } from '../intervals.js';
 import {
   TEMPLATES, EDITABLE, standardProgram, parsePace, paceText, speedText, paces, describeDay,
-  segmentsFor, totalSecs, estimateDistance, dayNumber, dayAt, dateOfDay, segSpeed, speedUnit,
+  segmentsFor, totalSecs, estimateDistance, dayNumber, dayAt, dateOfDay, segSpeed, speedUnit, nextWorkoutDay,
 } from '../run.js';
+
+// A program day that was missed yesterday (a workout day, not done), or 0.
+export function missedYesterday(plan, key = dateKey()) {
+  const m = dayNumber(plan, addDays(key, -1));
+  if (!m || dayAt(plan, m).type === 'rest') return 0;
+  return list('sessions').some((x) => x.planId === plan.id && x.run?.done && x.run.day === m) ? 0 : m;
+}
 
 const unitLabel = (u) => (u === 'km' ? 'km' : 'mile');
 const autoName = (plan) => `${paceText(plan.pace)} ${plan.paceUnit === 'km' ? 'per km' : 'Mile'} Program`;
@@ -48,17 +55,21 @@ function setPath(obj, path, value) {
   o[keys[keys.length - 1]] = value;
 }
 
+// The finished session for a program day, if any.
+const doneSession = (planId, n) => list('sessions').find((x) => x.planId === planId && x.run?.done && x.run.day === n) || null;
+
 function dayRow(day, i) {
   const n = i + 1;
   const date = draft.startDate ? dateOfDay(draft, n) : '';
-  const s = draft.id && date ? sessionFor(draft.id, date) : null;
-  const done = s?.run?.done;
+  const s = draft.id ? doneSession(draft.id, n) : null;
+  const done = !!s;
+  const isToday = date === dateKey();
   const fields = EDITABLE[day.type] || [];
   const t = TEMPLATES[day.type];
   return `
     <div class="run-day ${day.type === 'rest' ? 'rest' : ''}">
       <div class="run-day-head">
-        <span><b>Day ${n}</b> <span class="muted small">${date ? esc(prettyDate(date)) : ''}</span></span>
+        <span><b>Day ${n}</b> <span class="muted small">${date ? esc(prettyDate(date)) : ''}</span>${isToday ? ' <span class="tag">Today</span>' : ''}</span>
         ${done ? `<span class="ok small">${icons.check} Done${s.run.mileTime ? ` · mile ${paceText(s.run.mileTime)}` : ''}</span>` : ''}
       </div>
       <div class="run-day-fields">
@@ -112,6 +123,8 @@ export const editView = {
         </div>
       </section>
 
+      ${d.id && n && dayAt(d, n).type !== 'rest' ? `
+        <button class="btn primary wide" data-act="startRunToday" data-plan="${d.id}">${icons.play} Start today's run · Day ${n}: ${esc(describeDay(dayAt(d, n)))}</button>` : ''}
       <h2 class="section-title">${d.program.length} days${n ? ` · today is day ${n}` : ''}</h2>
       <section class="card run-days">
         ${d.program.map(dayRow).join('')}
@@ -314,6 +327,32 @@ export const runActions = {
     return false;
   },
   logRunManual({ el }) { return logRunSheet(get('sessions', el.dataset.id), null); },
+
+  startRunToday({ el }) {
+    // Save edits first, so the run uses what's on screen.
+    if (location.hash.startsWith('#/run-plan/') && editView.isDirty() && !editView.commit()) return false;
+    const s = startSession(el.dataset.plan, dateKey());
+    location.hash = `#/workout/${s.id}`;
+    return false;
+  },
+
+  // Rest day: pull the schedule forward so the next workout is today.
+  runDoNextToday({ el }) {
+    const plan = get('plans', el.dataset.plan);
+    const next = nextWorkoutDay(plan, dayNumber(plan, dateKey()));
+    if (!next) return;
+    plan.startDate = addDays(dateKey(), -(next - 1));
+    upsert('plans', plan);
+    toast(`Schedule moved up: day ${next} is today`, 3500);
+  },
+
+  // Missed yesterday: push the schedule back a day so yesterday's workout is today.
+  runPushBack({ el }) {
+    const plan = get('plans', el.dataset.plan);
+    plan.startDate = addDays(plan.startDate, 1);
+    upsert('plans', plan);
+    toast(`Schedule moved back a day: day ${dayNumber(plan, dateKey())} is today`, 3500);
+  },
 };
 
 // Today / Plans helpers -----------------------------------------------------------------------

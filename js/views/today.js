@@ -8,8 +8,16 @@ import { summary } from '../stats.js';
 import { progressBar, scheduleText, streaks, emptyState } from './common.js';
 import { exerciseOptions } from './plans.js';
 import { activitySheet, weightSheet, activityText } from './logsheets.js';
-import { programStatus, bestMile } from './runplan.js';
+import { programStatus, bestMile, missedYesterday } from './runplan.js';
 import { describeDay, dayAt, dateOfDay, nextWorkoutDay, paceText, segmentsFor, totalSecs } from '../run.js';
+
+// "Missed day 4 yesterday? Do it today" (pushes the program back a day).
+function missedNote(plan) {
+  const m = missedYesterday(plan);
+  return m ? `
+    <p class="small missed">Missed day ${m} yesterday (${esc(describeDay(dayAt(plan, m)))})?
+      <button class="btn small" data-act="runPushBack" data-plan="${plan.id}">Do it today</button></p>` : '';
+}
 
 // Run programs on a rest day, before they start, or once finished.
 function runInfoCard(plan, today) {
@@ -19,7 +27,9 @@ function runInfoCard(plan, today) {
   if (st.state === 'rest') {
     const next = nextWorkoutDay(plan, st.n);
     body = `<p class="muted small">Rest day · day ${st.n} of ${len}</p>
-      ${next ? `<p class="small">Next: ${esc(describeDay(dayAt(plan, next)))}, ${esc(prettyDate(dateOfDay(plan, next)))}</p>` : ''}`;
+      ${next ? `<p class="small">Next: ${esc(describeDay(dayAt(plan, next)))}, ${esc(prettyDate(dateOfDay(plan, next)))}</p>
+        <button class="btn small" data-act="runDoNextToday" data-plan="${plan.id}">${icons.play} Do the next workout today</button>` : ''}
+      ${missedNote(plan)}`;
   } else if (st.state === 'before') {
     body = `<p class="muted small">Starts ${esc(prettyDate(plan.startDate))} · day 1: ${esc(describeDay(dayAt(plan, 1)))}</p>`;
   } else {
@@ -110,6 +120,7 @@ function runCard(plan, today) {
         <span class="muted small">Day ${st.n} of ${plan.program.length}</span>
       </div>
       <p class="small">${esc(describeDay(st.day))} <span class="muted">· about ${mins} min</span></p>
+      ${done ? '' : missedNote(plan)}
       <button class="btn ${done ? '' : 'primary'}" data-act="openPlanToday" data-plan="${plan.id}">${done ? `${icons.check} Done. View` : `${icons.play} Start`}</button>
     </section>`;
 }

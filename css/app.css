@@ -392,3 +392,18 @@ body.no-tabs .tabbar { display: none; }
 .rt-next { color: var(--text-2); font-size: 15px; min-height: 1.4em; }
 .rt-bar { width: 100%; max-width: 360px; margin: 10px 0 14px; }
 .run-timer .timer-buttons { width: 100%; max-width: 360px; }
+
+/* unsaved changes bar (editors) */
+.unsaved-bar {
+  position: fixed; left: 12px; right: 12px; z-index: 11; max-width: 616px; margin: 0 auto;
+  bottom: calc(env(safe-area-inset-bottom) + 70px);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 8px 8px 16px; border-radius: 14px;
+  background: var(--text); color: var(--bg); box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
+  font-size: 15px; font-weight: 600;
+}
+.unsaved-bar[hidden] { display: none; }
+body.no-tabs .unsaved-bar { bottom: calc(env(safe-area-inset-bottom) + 12px); }
+.has-unsaved .view { padding-bottom: calc(env(safe-area-inset-bottom) + 160px); }
+.missed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--text-2); }
+.missed .btn { margin-top: 0; }

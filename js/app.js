@@ -62,7 +62,18 @@ function render() {
   const y = scrollY;
   viewEl.innerHTML = current.view.render(params);
   scrollTo(0, y);
+  updateUnsaved();
 }
+
+// "Unsaved changes · Save" bar above the tabs while an editor has unsaved edits.
+const unsavedEl = document.getElementById('unsaved');
+function updateUnsaved() {
+  unsavedEl.hidden = !current?.view.isDirty?.();
+  document.body.classList.toggle('has-unsaved', !unsavedEl.hidden); // room for the bar
+}
+document.getElementById('unsaved-save').addEventListener('click', () => {
+  if (current?.view.commit?.()) render();
+});
 
 function navigate() {
   // No profile on this phone yet: everything goes to the welcome screen.
@@ -74,6 +85,7 @@ function navigate() {
   viewEl.innerHTML = current.view.render(params);
   scrollTo(0, 0);
   document.querySelectorAll('.tabbar a').forEach((a) => a.classList.toggle('on', a.dataset.tab === current.tab));
+  updateUnsaved();
 }
 
 function renderTabs() {
@@ -146,6 +158,10 @@ document.addEventListener('input', (ev) => {
     document.getElementById('ex-results').replaceWith(tmp.querySelector('#ex-results'));
   }
 });
+
+// After the screen has handled typing or a change, show/hide the unsaved bar.
+document.addEventListener('input', updateUnsaved);
+document.addEventListener('change', updateUnsaved);
 
 // Re-render on data changes, unless the user is typing in a field on this screen.
 onChange(() => {
