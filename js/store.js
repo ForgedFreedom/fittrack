@@ -174,9 +174,19 @@ export const timerOn = (item) => item.timer !== false;
 // ---- sessions -----------------------------------------------------------------
 
 export function sessionFor(planId, key = dateKey()) {
+  const plan = get('plans', planId);
+  if (plan?.kind === 'run') return runSessionFor(plan, dayNumber(plan, key));
   const matches = list('sessions').filter((s) => s.planId === planId && s.date === key);
   if (!matches.length) return null;
   return matches.sort((a, b) => setCount(b) - setCount(a))[0];
+}
+
+// Run programs track sessions by program day (not date), so two days can be done on
+// one date. `cycle` separates a restarted program from its earlier run.
+export function runSessionFor(plan, n) {
+  if (!n) return null;
+  const all = list('sessions').filter((s) => s.planId === plan.id && s.run?.day === n && (s.run.cycle ?? null) === (plan.cycle ?? null));
+  return all.find((s) => s.run.done) || all[0] || null;
 }
 
 const setCount = (s) => s.items.reduce((n, it) => n + it.sets.length, 0);
@@ -208,10 +218,12 @@ export function startSession(planId, key = dateKey()) {
   const plan = get('plans', planId);
   const existing = sessionFor(planId, key);
   if (plan.kind === 'run') {
-    if (!existing) return upsert('sessions', { planId, date: key, startedAt: now(), items: [], run: { day: dayNumber(plan, key), done: false } });
-    // Not done yet: follow the program in case its start date was changed.
-    if (!existing.run.done && dayNumber(plan, key) && existing.run.day !== dayNumber(plan, key)) {
-      existing.run = { ...existing.run, day: dayNumber(plan, key) };
+    if (!existing) {
+      return upsert('sessions', { planId, date: key, startedAt: now(), items: [], run: { day: dayNumber(plan, key), done: false, cycle: plan.cycle ?? null } });
+    }
+    // Opened earlier but not done: it's being done today.
+    if (!existing.run.done && existing.date !== key) {
+      existing.date = key;
       return upsert('sessions', existing);
     }
     return existing;

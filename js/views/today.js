@@ -8,7 +8,7 @@ import { summary } from '../stats.js';
 import { progressBar, scheduleText, streaks, emptyState } from './common.js';
 import { exerciseOptions } from './plans.js';
 import { activitySheet, weightSheet, activityText } from './logsheets.js';
-import { programStatus, bestMile, missedYesterday } from './runplan.js';
+import { programStatus, bestMile, missedYesterday, nextNowButton } from './runplan.js';
 import { describeDay, dayAt, dateOfDay, nextWorkoutDay, paceText, segmentsFor, totalSecs } from '../run.js';
 
 // "Missed day 4 yesterday? Do it today" (pushes the program back a day).
@@ -35,7 +35,8 @@ function runInfoCard(plan, today) {
   } else {
     const best = bestMile(plan);
     body = `<p class="small">🎉 Program finished${best ? ` · best mile <b>${paceText(best)}</b> (goal ${paceText(plan.pace)})` : ''}</p>
-      <p class="muted small">Edit it to set a new start date or a faster target.</p>`;
+      <button class="btn small" data-act="runRestartPlan" data-plan="${plan.id}">Restart program</button>
+      <p class="muted small">Tip: edit the program first to set a faster target pace.</p>`;
   }
   return `
     <section class="card plan-card">
@@ -120,7 +121,7 @@ function runCard(plan, today) {
         <span class="muted small">Day ${st.n} of ${plan.program.length}</span>
       </div>
       <p class="small">${esc(describeDay(st.day))} <span class="muted">· about ${mins} min</span></p>
-      ${done ? '' : missedNote(plan)}
+      ${done ? nextNowButton(plan, s) : missedNote(plan)}
       <button class="btn ${done ? '' : 'primary'}" data-act="openPlanToday" data-plan="${plan.id}">${done ? `${icons.check} Done. View` : `${icons.play} Start`}</button>
     </section>`;
 }

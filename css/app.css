@@ -407,3 +407,14 @@ body.no-tabs .unsaved-bar { bottom: calc(env(safe-area-inset-bottom) + 12px); }
 .has-unsaved .view { padding-bottom: calc(env(safe-area-inset-bottom) + 160px); }
 .missed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--text-2); }
 .missed .btn { margin-top: 0; }
+
+/* run timer: round display, dots, speed changes */
+.rt-round { font-size: 26px; font-weight: 700; color: var(--text-2); min-height: 1.3em; font-variant-numeric: tabular-nums; }
+.rt-round b { font-size: 44px; color: var(--text); }
+.rt-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: 340px; min-height: 12px; margin-bottom: 6px; }
+.rt-dots i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--text-2); }
+.rt-dots i.done { background: var(--text-2); }
+.rt-dots i.now { background: var(--accent); border-color: var(--accent); transform: scale(1.3); }
+.run-timer.kind-shift { background: color-mix(in srgb, var(--warn) 22%, var(--bg)); }
+.run-timer.kind-shift .rt-label { color: var(--warn); }
+.rt-top span:last-child { font-variant-numeric: tabular-nums; }

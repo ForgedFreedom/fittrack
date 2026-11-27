@@ -127,7 +127,27 @@ export function segmentsFor(plan, day) {
     }
   }
   segs.push({ kind: 'cooldown', label: 'Cool-down', secs: 300, speed: COOL_SPEED[u], note: 'Easy walk', pace: walk * 1.15 });
-  return segs;
+  return withSpeedChanges(segs, plan.shiftSecs ?? SHIFT_DEFAULT, u);
+}
+
+// Seconds the treadmill needs to change speed (set per program; 0 = none, e.g. outdoors).
+export const SHIFT_DEFAULT = 5;
+
+// Insert a short "speed up / slow down" stretch wherever the speed changes, so each
+// run or walk is timed from when you're actually at the new speed.
+function withSpeedChanges(segs, secs, u) {
+  if (!secs) return segs;
+  const out = [];
+  segs.forEach((s, i) => {
+    const prev = segs[i - 1];
+    if (prev && segSpeed(prev) !== segSpeed(s)) {
+      const up = segSpeed(s) > segSpeed(prev);
+      out.push({ kind: 'shift', up, label: up ? 'Speed up' : 'Slow down', secs, speed: segSpeed(s), pace: (prev.pace + s.pace) / 2,
+        round: s.round, rounds: s.rounds, note: `to ${speedText(3600 / segSpeed(s), u)} for ${s.label.toLowerCase()}` });
+    }
+    out.push(s);
+  });
+  return out;
 }
 
 export const totalSecs = (segs) => segs.reduce((n, s) => n + (s.secs || 0), 0);

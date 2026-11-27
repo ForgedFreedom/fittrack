@@ -1,22 +1,22 @@
 // Run programs: the program editor (#/run-plan/<id>) and the day's run screen
 // (shown by the workout route when a session belongs to a run program).
 
-import { get, getState, list, upsert, remove, startSession } from '../store.js';
-import { esc, dateKey, num, prettyDate, addDays } from '../util.js';
+import { get, getState, list, upsert, remove, startSession, runSessionFor } from '../store.js';
+import { esc, dateKey, num, prettyDate, addDays, uid } from '../util.js';
 import { icons, sheet, toast, confirmSheet, speak, unlockAudio } from '../ui.js';
 import { backLink } from './common.js';
 import { Draft } from '../drafts.js';
 import { runIntervals } from '../intervals.js';
 import {
   TEMPLATES, EDITABLE, standardProgram, parsePace, paceText, speedText, paces, describeDay,
-  segmentsFor, totalSecs, estimateDistance, dayNumber, dayAt, dateOfDay, segSpeed, speedUnit, nextWorkoutDay,
+  segmentsFor, totalSecs, estimateDistance, dayNumber, dayAt, dateOfDay, segSpeed, speedUnit, nextWorkoutDay, SHIFT_DEFAULT,
 } from '../run.js';
 
 // A program day that was missed yesterday (a workout day, not done), or 0.
 export function missedYesterday(plan, key = dateKey()) {
   const m = dayNumber(plan, addDays(key, -1));
   if (!m || dayAt(plan, m).type === 'rest') return 0;
-  return list('sessions').some((x) => x.planId === plan.id && x.run?.done && x.run.day === m) ? 0 : m;
+  return runSessionFor(plan, m)?.run.done ? 0 : m;
 }
 
 const unitLabel = (u) => (u === 'km' ? 'km' : 'mile');
@@ -56,12 +56,12 @@ function setPath(obj, path, value) {
 }
 
 // The finished session for a program day, if any.
-const doneSession = (planId, n) => list('sessions').find((x) => x.planId === planId && x.run?.done && x.run.day === n) || null;
+const doneSession = (plan, n) => { const x = runSessionFor(plan, n); return x?.run.done ? x : null; };
 
 function dayRow(day, i) {
   const n = i + 1;
   const date = draft.startDate ? dateOfDay(draft, n) : '';
-  const s = draft.id ? doneSession(draft.id, n) : null;
+  const s = draft.id ? doneSession(draft, n) : null;
   const done = !!s;
   const isToday = date === dateKey();
   const fields = EDITABLE[day.type] || [];
@@ -113,6 +113,9 @@ export const editView = {
         </div>
         ${pacesCard(d)}
         <p class="muted small">Treadmill: set the speed shown. Outdoors: aim for the pace.</p>
+        <label class="field"><span>Treadmill speed-change time (seconds)</span>
+          <input type="number" inputmode="numeric" min="0" max="20" step="1" data-bind="shiftSecs" value="${d.shiftSecs ?? SHIFT_DEFAULT}"></label>
+        <p class="muted small">Adds a short "Speed up" / "Slow down" countdown before each run and walk, so every interval is timed at full speed. Use 0 outdoors.</p>
         <label class="field"><span>Name</span>
           <input data-bind="name" value="${esc(d.name)}" autocomplete="off"></label>
         <div class="field-grid">
@@ -138,7 +141,8 @@ export const editView = {
 
       <div class="btn-col">
         <button class="btn primary wide" data-act="saveRunPlan">Save program</button>
-        ${d.id ? '<button class="btn ghost danger-text" data-act="deleteRunPlan">Delete program</button>' : ''}
+        ${d.id ? `<button class="btn wide" data-act="runRestart">Restart program from today</button>
+          <button class="btn ghost danger-text" data-act="deleteRunPlan">Delete program</button>` : ''}
       </div>`;
   },
 
@@ -198,6 +202,12 @@ export const editView = {
       }
     },
     saveRunPlan() { if (editView.commit()) location.hash = '#/plans'; },
+    async runRestart() {
+      if (!(await confirmSheet('Restart the program?', 'Day 1 becomes today and every day starts fresh. Runs you logged stay in Walks & runs.', 'Restart'))) return;
+      draft.cycle = uid(); // a new round of the program: earlier "done" marks don't carry over
+      draft.startDate = dateKey();
+      if (editView.commit()) toast('Program restarted: day 1 is today');
+    },
     async deleteRunPlan() {
       if (!(await confirmSheet('Delete program?', `"${draft.name}" will be removed. Runs you logged stay in Walks & runs.`, 'Delete', true))) return;
       remove('plans', draft.id);
@@ -209,8 +219,10 @@ export const editView = {
 
 // ---- the day's run screen --------------------------------------------------------------------
 
-function segmentRows(segs, u) {
-  const rows = [];
+function segmentRows(all, u) {
+  const segs = all.filter((x) => x.kind !== 'shift');
+  const shift = all.find((x) => x.kind === 'shift');
+  const rows = shift ? [`<p class="muted small">Includes a ${shift.secs}-second speed change before each run and walk.</p>`] : [];
   const fmt = (s) => (s.secs ? `${Math.floor(s.secs / 60)}:${String(s.secs % 60).padStart(2, '0')}` : '');
   const speed = (s) => `${segSpeed(s)} ${speedUnit(u)}`;
   for (let i = 0; i < segs.length; i++) {
@@ -248,6 +260,7 @@ export function renderRunSession(s) {
       <section class="card done-card">
         <p class="ok">${icons.check} <b>Done</b></p>
         ${act ? `<p class="small">${act.distance ? `${act.distance} ${u}` : ''}${act.duration ? ` · ${Math.round(act.duration / 60)} min` : ''}</p>` : ''}
+        ${nextNowButton(plan, s)}
         ${s.run.mileTime ? `<p><b>Mile time: ${paceText(s.run.mileTime)}</b> <span class="muted small">(goal ${paceText(Math.round(plan.pace * (u === 'km' ? 1.609 : 1)))})</span></p>` : ''}
       </section>` : ''}
 
@@ -263,8 +276,16 @@ export function renderRunSession(s) {
     : '<section class="card"><p>Rest day. Recovery is part of getting faster.</p></section>'}`;
 }
 
+// After finishing today's day: offer to do the next workout day now as well.
+export function nextNowButton(plan, s) {
+  const today = dayNumber(plan, dateKey());
+  if (!s?.run.done || s.run.day !== today) return '';
+  const next = nextWorkoutDay(plan, today);
+  return next ? `<button class="btn small" data-act="runAdvance" data-plan="${plan.id}">${icons.play} Do day ${next} now: ${esc(describeDay(dayAt(plan, next)))}</button>` : '';
+}
+
 // Which program day a session is: fixed once done; otherwise follows the program's dates.
-const runDay = (s, plan) => (s.run.done ? s.run.day : dayNumber(plan, s.date) || s.run.day);
+const runDay = (s) => s.run.day;
 
 async function logRunSheet(s, result) {
   const plan = get('plans', s.planId);
@@ -334,6 +355,29 @@ export const runActions = {
     const s = startSession(el.dataset.plan, dateKey());
     location.hash = `#/workout/${s.id}`;
     return false;
+  },
+
+  // Finished today's day and want more: move the program up so the next workout is today, and start it.
+  runAdvance({ el }) {
+    const plan = get('plans', el.dataset.plan);
+    const next = nextWorkoutDay(plan, dayNumber(plan, dateKey()));
+    if (!next) return false;
+    plan.startDate = addDays(dateKey(), -(next - 1));
+    upsert('plans', plan);
+    const s = startSession(plan.id, dateKey());
+    location.hash = `#/workout/${s.id}`;
+    toast(`Day ${next} is up. The rest of the program moves up too.`, 3500);
+    return false;
+  },
+
+  async runRestartPlan({ el }) {
+    const plan = get('plans', el.dataset.plan);
+    if (!(await confirmSheet('Restart the program?', `Day 1 of "${plan.name}" becomes today. Runs you logged stay in Walks & runs.`, 'Restart'))) return;
+    plan.cycle = uid();
+    plan.startDate = dateKey();
+    plan.active = true;
+    upsert('plans', plan);
+    toast('Program restarted: day 1 is today');
   },
 
   // Rest day: pull the schedule forward so the next workout is today.

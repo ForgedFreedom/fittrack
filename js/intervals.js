@@ -17,10 +17,16 @@ const spokenTime = (sec) => {
 const spokenPace = (sec) => (sec % 60 ? `${Math.floor(sec / 60)} ${String(sec % 60).padStart(2, '0')}` : `${sec / 60} minute`);
 
 // What to say when a segment starts.
-function cue(seg, unit) {
+function cue(seg, unit, prev) {
   const speed = `${segSpeed(seg)} ${unit === 'km' ? 'kilometers' : 'miles'} per hour`;
   const round = seg.round && (seg.kind === 'run' || seg.kind === 'sprint') ? `Round ${seg.round} of ${seg.rounds}. ` : '';
+  // Just changed speed: the speed was already announced, so keep it short.
+  if (prev?.kind === 'shift') {
+    if (seg.kind === 'run' || seg.kind === 'sprint') return `Go! ${round}${spokenTime(seg.secs)}.`;
+    if (seg.kind === 'trial') return 'Go! Time trial, one mile.';
+  }
   switch (seg.kind) {
+    case 'shift': return `${seg.up ? 'Speed up' : 'Slow down'} to ${speed}.`;
     case 'warmup': return `Warm up. Brisk walk, ${spokenTime(seg.secs)}, ${speed}.`;
     case 'run': return `${round}Run, ${spokenTime(seg.secs)}. ${speed}, ${spokenPace(seg.pace)} pace.`;
     case 'sprint': return `${round}All out! ${spokenTime(seg.secs)}.`;
@@ -55,7 +61,9 @@ export function runIntervals({ title, segments, unit = 'mi', say, onExit }) {
 
   root.innerHTML = `
     <div class="run-timer">
-      <div class="rt-top"><span>${esc(title)}</span><span data-r="round"></span></div>
+      <div class="rt-top"><span>${esc(title)}</span><span data-r="left"></span></div>
+      <div class="rt-round" data-r="round"></div>
+      <div class="rt-dots" data-r="dots"></div>
       <div class="rt-label" data-r="label"></div>
       <div class="rt-speed"><span data-r="speed"></span> <small>${speedUnit(unit)}</small></div>
       <div class="rt-pace" data-r="pace"></div>
@@ -79,14 +87,23 @@ export function runIntervals({ title, segments, unit = 'mi', say, onExit }) {
     box.className = `run-timer kind-${seg.kind}`;
     $('label').textContent = seg.label.toUpperCase();
     $('speed').textContent = segSpeed(seg);
-    const pace = seg.kind === 'warmup' || seg.kind === 'cooldown' || seg.kind === 'walk' || seg.kind === 'recover'
+    const pace = ['warmup', 'cooldown', 'walk', 'recover', 'shift'].includes(seg.kind)
       ? seg.note
       : `${paceText(seg.pace)} /${unit}${seg.note ? ` · ${seg.note}` : ''}`;
     $('pace').textContent = pace;
-    $('round').textContent = seg.round ? `Round ${seg.round} of ${seg.rounds}` : '';
-    $('next').textContent = nextText(segments[idx + 1], unit);
+    // Big "ROUND 5 of 8" with a dot per round (done / current / to go); the phase name otherwise.
+    const phase = { warmup: 'Warm-up', cooldown: 'Cool-down', trial: 'Time trial' }[seg.kind];
+    $('round').innerHTML = seg.round
+      ? `Round <b>${seg.round}</b> of ${seg.rounds}`
+      : phase ? esc(phase) : '';
+    $('dots').innerHTML = seg.rounds > 1
+      ? Array.from({ length: seg.rounds }, (_, k) => `<i class="${k + 1 < seg.round ? 'done' : k + 1 === seg.round ? 'now' : ''}"></i>`).join('')
+      : '';
+    // "Next" names the next activity, not the short speed change in between.
+    const upcoming = segments.slice(idx + 1).find((n) => n.kind !== 'shift');
+    $('next').textContent = nextText(upcoming, unit);
     $('skip').textContent = seg.secs ? 'Skip ⏭' : 'Finished mile ✓';
-    say(cue(seg, unit));
+    say(cue(seg, unit, segments[idx - 1]));
   }
 
   function advance(silent = false) {
@@ -151,6 +168,9 @@ export function runIntervals({ title, segments, unit = 'mi', say, onExit }) {
     }
     const done = spent.slice(0, idx).reduce((a, b) => a + b, 0) + Math.min(el, seg.secs || el);
     $('bar').style.width = `${total ? Math.min(100, (done / total) * 100) : 0}%`;
+    // Time still ahead: the rest of this segment plus every segment after it.
+    const ahead = Math.max(0, (seg.secs || 0) - el) + segments.slice(idx + 1).reduce((n, x) => n + (x.secs || 0), 0);
+    $('left').textContent = `${clock(ahead)} left`;
     raf = requestAnimationFrame(tick);
   }
 
